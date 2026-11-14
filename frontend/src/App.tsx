@@ -161,7 +161,18 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
     const product = productRef.current;
     const image = imageRef.current;
     const anchor = lensAnchorRef.current;
-    if (!product || !image || !anchor || image.clientWidth === 0) return null;
+    // CSS width can be non-zero before the PNG has loaded or acquired intrinsic dimensions.
+    // Never derive the lens origin from an incomplete or collapsed image.
+    if (
+      !product ||
+      !image ||
+      !anchor ||
+      !image.complete ||
+      image.naturalWidth === 0 ||
+      image.naturalHeight === 0 ||
+      image.clientWidth === 0 ||
+      image.clientHeight === 0
+    ) return null;
 
     const productRect = product.getBoundingClientRect();
     const imageRect = image.getBoundingClientRect();
