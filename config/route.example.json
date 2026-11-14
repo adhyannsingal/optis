@@ -1,0 +1,7 @@
+{
+  "id": "short-walk",
+  "name": "Short checked outdoor walk",
+  "verified": false,
+  "waypoints": [],
+  "instructions": ["Follow the checked path.", "Turn right along the checked path."]
+}

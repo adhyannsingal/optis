@@ -1,0 +1,367 @@
+{
+  "name": "Noisy campus walk",
+  "simulated": true,
+  "coordinate_system": "local_metres",
+  "description": "Invented metre coordinates, not a real campus route; position noise, a skipped-corner fix, no-fix interval and a wrong turn.",
+  "destination": "W. E. B. Du Bois Library",
+  "points": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      60
+    ],
+    [
+      70,
+      60
+    ],
+    [
+      70,
+      120
+    ]
+  ],
+  "instructions": [
+    "Follow the first simulated segment for 60 metres.",
+    "Continue along the second simulated segment for 70 metres.",
+    "Continue along the final simulated segment toward the destination area."
+  ],
+  "events": [
+    {
+      "label": "start",
+      "now": 0,
+      "fix": {
+        "timestamp": 0,
+        "x": 0,
+        "y": 0,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 5,
+      "fix": {
+        "timestamp": 5,
+        "x": 0.5,
+        "y": 7,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 10,
+      "fix": {
+        "timestamp": 10,
+        "x": -0.6,
+        "y": 15,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 15,
+      "fix": {
+        "timestamp": 15,
+        "x": 0.8,
+        "y": 23,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 20,
+      "fix": {
+        "timestamp": 20,
+        "x": -0.5,
+        "y": 30,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 25,
+      "fix": {
+        "timestamp": 25,
+        "x": 0.4,
+        "y": 38,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 30,
+      "fix": {
+        "timestamp": 30,
+        "x": -0.7,
+        "y": 45,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 35,
+      "fix": {
+        "timestamp": 35,
+        "x": 0.5,
+        "y": 47,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 40,
+      "fix": {
+        "timestamp": 40,
+        "x": 0,
+        "y": 51,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "corner passed between fixes",
+      "now": 45,
+      "fix": {
+        "timestamp": 45,
+        "x": 8,
+        "y": 59,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 50,
+      "fix": {
+        "timestamp": 50,
+        "x": 14,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 55,
+      "fix": {
+        "timestamp": 55,
+        "x": 21,
+        "y": 61,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 60,
+      "fix": {
+        "timestamp": 60,
+        "x": 27,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "no location updates",
+      "now": 68,
+      "fix": null
+    },
+    {
+      "label": "inaccurate fix",
+      "now": 70,
+      "fix": {
+        "timestamp": 70,
+        "x": 29,
+        "y": 60,
+        "accuracy": 80
+      }
+    },
+    {
+      "label": "stale fix",
+      "now": 72,
+      "fix": {
+        "timestamp": 61,
+        "x": 28,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "signal recovered",
+      "now": 73,
+      "fix": {
+        "timestamp": 73,
+        "x": 30,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 78,
+      "fix": {
+        "timestamp": 78,
+        "x": 37,
+        "y": 59,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 83,
+      "fix": {
+        "timestamp": 83,
+        "x": 44,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 88,
+      "fix": {
+        "timestamp": 88,
+        "x": 51,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 93,
+      "fix": {
+        "timestamp": 93,
+        "x": 58,
+        "y": 61,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "second turn",
+      "now": 98,
+      "fix": {
+        "timestamp": 98,
+        "x": 65,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 103,
+      "fix": {
+        "timestamp": 103,
+        "x": 71,
+        "y": 62,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "wrong turn",
+      "now": 108,
+      "fix": {
+        "timestamp": 108,
+        "x": 81,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "off route",
+      "now": 113,
+      "fix": {
+        "timestamp": 113,
+        "x": 92,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "sustained detour",
+      "now": 116,
+      "fix": {
+        "timestamp": 116,
+        "x": 99,
+        "y": 60,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "back on route",
+      "now": 121,
+      "fix": {
+        "timestamp": 121,
+        "x": 70,
+        "y": 69,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 126,
+      "fix": {
+        "timestamp": 126,
+        "x": 71,
+        "y": 77,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 131,
+      "fix": {
+        "timestamp": 131,
+        "x": 69,
+        "y": 85,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 136,
+      "fix": {
+        "timestamp": 136,
+        "x": 70,
+        "y": 92,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 141,
+      "fix": {
+        "timestamp": 141,
+        "x": 71,
+        "y": 100,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "walking with position noise",
+      "now": 146,
+      "fix": {
+        "timestamp": 146,
+        "x": 70,
+        "y": 108,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "near destination",
+      "now": 151,
+      "fix": {
+        "timestamp": 151,
+        "x": 70,
+        "y": 115,
+        "accuracy": 3
+      }
+    },
+    {
+      "label": "arrival confirmation",
+      "now": 154,
+      "fix": {
+        "timestamp": 154,
+        "x": 70,
+        "y": 118,
+        "accuracy": 3
+      }
+    }
+  ]
+}

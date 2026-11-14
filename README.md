@@ -1,11 +1,19 @@
 # PHAROS
 
-PHAROS is an assistive prototype for GPS route guidance, object finding, and voice-controlled tabletop retrieval. A camera feed supports spoken directions. A fixed camera verifies the pickup zone before a stand-mounted Waveshare arm moves a lightweight bottle to a tray. The body mount is demonstrated with actuator power disconnected.
+PHAROS is an assistive prototype for route guidance, object finding, and voice-controlled tabletop retrieval.
 
-## Start here
+## Run the backend locally
 
-1. [PHAROS Build Spec Final](docs/PHAROS_Build_Spec_Final.md) — source of truth for scope, build order, ownership, and acceptance gates.
-2. [System contracts](docs/PHAROS_Interfaces.md) — supporting interface and motion-control details.
-3. [Bench and demo runbook](docs/PHAROS_Bench_and_Demo.md) — hardware preflight, acceptance trials, and demo setup.
+```sh
+uv sync --locked --extra test --extra vision
+export PHAROS_TOKEN="$(openssl rand -hex 24)"
+uv run uvicorn pharos.api:from_environment --factory --host 127.0.0.1 --port 8000
+```
 
-The [original build plan](docs/PHAROS_Build_Plan.md) and [integration review](docs/PHAROS_Integration_Review.md) are planning references. Follow the final spec where they differ.
+Keep the token in the running shell. `GET /v1/health` reports readiness. Interactive API docs are at `/docs`. Send the token as `Authorization: Bearer <token>` for status, intents and phone fixes. Use one server worker because route state and camera ownership are local to the process.
+
+- Send `{"request_id":"find-1","kind":"find","item":"bottle"}` to `POST /v1/intent`. Use `kind=remember` and a `place` to set a confirmed placement.
+- Send `kind=start_route` with `route_id=standard` or `noisy`, then send `kind=next` to advance replay.
+- For vision, provide a matching YOLOv8n ONNX file and checksum manifest. Set `PHAROS_MODEL` to the ONNX path, `PHAROS_MODEL_MANIFEST` if using another manifest, and `PHAROS_CAMERA` to a camera index, a Linux UVC device path, or the W11 private capture URL. Use `scripts/export_model.py` from an environment with Ultralytics, ONNX and ONNX Runtime to export the checksum-pinned checkpoint. The generated manifest must match that export. A W11 frame needs the `X-PHAROS-Frame-Age-Us` header for live guidance.
+- For live GPS, use the [iPhone sender](clients/location-ios/README.md). Copy `config/route.example.json` to `config/route.local.json`, enter measured outdoor waypoints as latitude/longitude pairs and one instruction per segment, set `verified` after walking the route, and start with `PHAROS_ROUTE=config/route.local.json`. The backend rejects weak or stale fixes. Use the route ID in your file to start live guidance.
+- Run `uv run python -m unittest discover -s tests -v` for the backend checks. The arm remains disabled in this implementation.

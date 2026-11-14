@@ -1,0 +1,20 @@
+{
+  "name": "Dorm to Library",
+  "simulated": true,
+  "description": "Invented local metre coordinates for a campus-style replay, not a surveyed campus path or entrance.",
+  "destination": "W. E. B. Du Bois Library",
+  "points": [[0, 0], [0, 50], [50, 50], [50, 100]],
+  "instructions": ["Continue along the simulated path for 50 metres.", "Turn right in the simulation and continue for 50 metres.", "Turn left in the simulation and continue toward the destination area."],
+  "events": [
+    {"label": "start", "now": 0, "fix": {"timestamp": 0, "x": 0, "y": 0, "accuracy": 3}},
+    {"label": "approach first turn", "now": 5, "fix": {"timestamp": 5, "x": 0, "y": 46, "accuracy": 3}},
+    {"label": "first detour fix", "now": 10, "fix": {"timestamp": 10, "x": 20, "y": 75, "accuracy": 3}},
+    {"label": "sustained detour", "now": 13, "fix": {"timestamp": 13, "x": 25, "y": 80, "accuracy": 3}},
+    {"label": "back on path", "now": 17, "fix": {"timestamp": 17, "x": 30, "y": 50, "accuracy": 3}},
+    {"label": "GPS dropout at second turn", "now": 30, "fix": {"timestamp": 18, "x": 49, "y": 50, "accuracy": 3}},
+    {"label": "inaccurate GPS", "now": 31, "fix": {"timestamp": 31, "x": 49, "y": 50, "accuracy": 80}},
+    {"label": "signal recovered at second turn", "now": 33, "fix": {"timestamp": 33, "x": 49, "y": 50, "accuracy": 3}},
+    {"label": "near destination", "now": 40, "fix": {"timestamp": 40, "x": 50, "y": 97, "accuracy": 3}},
+    {"label": "arrival confirmed", "now": 43, "fix": {"timestamp": 43, "x": 50, "y": 99, "accuracy": 3}}
+  ]
+}
