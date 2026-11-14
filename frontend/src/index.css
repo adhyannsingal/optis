@@ -383,7 +383,8 @@
   padding: 48px;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #08090b;
   color: #f4f4f2;
 }
