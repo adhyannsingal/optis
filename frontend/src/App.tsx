@@ -153,6 +153,7 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
   const transitionStarted = useRef(false);
   const transitionTimer = useRef<number | null>(null);
   const pendingFrame = useRef<number | null>(null);
+  const pendingSince = useRef<number | null>(null);
   const productRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const lensAnchorRef = useRef<HTMLSpanElement>(null);
@@ -180,6 +181,7 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
     const lensViewportX = anchorRect.left + anchorRect.width / 2;
     const lensViewportY = anchorRect.top + anchorRect.height / 2;
     const lensDiameter = imageRect.width * productZoomConfig.lensDiameterRatio;
+    if (!Number.isFinite(lensDiameter) || lensDiameter <= 0 || !Number.isFinite(lensViewportX) || !Number.isFinite(lensViewportY)) return null;
 
     const geometry: LensGeometry = {
       lensViewportX,
@@ -223,17 +225,29 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
       pendingFrame.current = null;
       if (transitionStarted.current) return;
 
+      const image = imageRef.current;
       const measuredGeometry = measureLens();
       if (!measuredGeometry) {
+        // A failed image should never trap the user in a requestAnimationFrame loop.
+        // Also bound the wait when the network stalls or the image never acquires a size.
+        const failed = image?.complete && !image.naturalWidth;
+        const timedOut = performance.now() - (pendingSince.current ?? 0) > 4000;
+        if (failed || timedOut) {
+          transitionStarted.current = true;
+          enterApp(); // Accessible non-animated fallback.
+          return;
+        }
         pendingFrame.current = window.requestAnimationFrame(attemptTransition);
         return;
       }
 
       transitionStarted.current = true;
+      pendingSince.current = null;
       setZooming(true);
       transitionTimer.current = window.setTimeout(enterApp, productZoomConfig.durationMs);
     };
 
+    pendingSince.current = performance.now();
     attemptTransition();
   }, [enterApp, measureLens]);
 
@@ -249,8 +263,10 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
         return;
       }
 
-      wheelDistance += event.deltaY;
-      if (wheelDistance > 28) startTransition();
+      // Normalize line/page wheel events; ignore tiny trackpad gestures.
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
+      wheelDistance += Math.min(delta, 120);
+      if (wheelDistance > 65) startTransition();
 
       if (wheelResetTimer !== null) window.clearTimeout(wheelResetTimer);
       wheelResetTimer = window.setTimeout(() => {
@@ -258,7 +274,13 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
       }, 180);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (["ArrowDown", "PageDown"].includes(event.key)) startTransition();
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      if (event.target instanceof HTMLElement &&
+          (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) || event.target.isContentEditable)) return;
+      if (["ArrowDown", "PageDown"].includes(event.key)) {
+        event.preventDefault();
+        startTransition();
+      }
     };
     const onTouchStart = (event: TouchEvent) => {
       touchStart = event.touches[0]?.clientY ?? 0;
@@ -287,6 +309,7 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
       if (transitionTimer.current !== null) {
         window.clearTimeout(transitionTimer.current);
       }
+      pendingSince.current = null;
     };
   }, [startTransition]);
 
