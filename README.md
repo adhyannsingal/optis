@@ -4,7 +4,8 @@ PHAROS is an assistive prototype for GPS route guidance, object finding, and voi
 
 ## Start here
 
-1. [Revised integration plan](docs/PHAROS_Integration_Review.md) — current priorities for GPS, obstacle and item guidance, and standalone Jetson voice control.
-2. [Build plan](docs/PHAROS_Build_Plan.md) — claim a role, pick the current milestone and check the submission clock.
-3. [System contracts](docs/PHAROS_Interfaces.md) — agree on inputs, status, and safe motion behavior before writing adapters.
-4. [Bench and demo runbook](docs/PHAROS_Bench_and_Demo.md) — verify hardware, qualify the table setup, run acceptance trials, and choose the live demo.
+1. [PHAROS Build Spec Final](docs/PHAROS_Build_Spec_Final.md) — source of truth for scope, build order, ownership, and acceptance gates.
+2. [System contracts](docs/PHAROS_Interfaces.md) — supporting interface and motion-control details.
+3. [Bench and demo runbook](docs/PHAROS_Bench_and_Demo.md) — hardware preflight, acceptance trials, and demo setup.
+
+The [original build plan](docs/PHAROS_Build_Plan.md) and [integration review](docs/PHAROS_Integration_Review.md) are planning references. Follow the final spec where they differ.
