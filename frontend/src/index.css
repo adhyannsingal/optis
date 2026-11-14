@@ -453,6 +453,77 @@
   }
 }
 
+/* Minimal real-API control area; keep the cinematic landing untouched. */
+.app-console {
+  width: min(540px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 72px auto 24px;
+}
+.app-device-note {
+  margin: 0;
+  color: rgb(244 244 242 / 55%);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.app-token-label {
+  color: rgb(244 244 242 / 82%);
+  font-size: 13px;
+  font-weight: 550;
+}
+.app-token {
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid rgb(244 244 242 / 25%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 5%);
+  color: #f4f4f2;
+  font: inherit;
+  font-size: 14px;
+}
+.app-token:focus-visible {
+  outline: 2px solid #f4f4f2;
+  outline-offset: 2px;
+}
+.app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pharos-app-shell .app-actions button {
+  position: static;
+  min-height: 44px;
+  padding: 8px 13px;
+  border: 1px solid rgb(244 244 242 / 25%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 5%);
+  color: #f4f4f2;
+  font-size: 13px;
+}
+.pharos-app-shell .app-actions button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.app-response {
+  min-height: 1.5em;
+  margin: 0;
+  color: #f4f4f2;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.app-ready-state .is-connected {
+  background: #8ea89b;
+}
+.app-ready-state span:not(.is-connected) {
+  background: #888;
+  box-shadow: none;
+}
+@media (max-width: 580px) {
+  .app-console { margin-top: 90px; }
+  .pharos-app-shell .app-actions button { flex: 1 1 42%; }
+}
+
 @media (max-width: 900px) {
   .topbar {
     padding: 24px;
