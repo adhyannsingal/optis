@@ -1,108 +1,102 @@
-# PHAROS | HackUMass XIV Build Plan
+# PHAROS | HackUMass XIV build plan
 
-**Version:** 1.0 | **Date:** November 14, 2026 | **Team:** 4 | **Build window:** 36 hours
+Four people · 36 hours · Amherst, MA
 
-## Project definition
+PHAROS explores how camera-equipped glasses, audio cues, and a body-mountable arm could assist people with visual and upper-limb impairments. For judging, a seated participant requests a lightweight bottle, hears its approximate direction, and requests retrieval. The stand-mounted arm transfers the bottle from a marked pickup zone to a tray after a spotter approves. The participant accesses the tray after motion is disabled and the spotter clears it. Show the wearable fit separately with the drive supply and power-capable tether disconnected.
 
-**Pitch:** PHAROS is an experimental assistive system integrating camera-equipped smart glasses, edge perception, audio guidance, and a robotic manipulator to help users find and retrieve everyday objects.
+## Start in parallel
 
-**Primary workflow:** A seated user asks to find a water bottle. Glasses identify it and provide audio guidance. The user asks the robot to retrieve it. Shared object localization supplies a safe, deterministic controller, which moves a lightweight bottle from a fixed tabletop pickup point to an accessible tray. Powered autonomous manipulation is demonstrated on a rigid stand, not on a person.
+At kickoff, write one name beside each role in the team's shared notes, select the demo object and tray, and agree on the [v1 contracts](PHAROS_Interfaces.md). The plan uses role names until the team assigns people. If starting late, spend the first 15 minutes here, then jump to the current time gate. Keep one arm operator and one spotter for powered sessions.
 
-## Hardware inventory
+| Owner and write area | First 30–60 minutes | Deliverable and handoff |
+| --- | --- | --- |
+| A · Perception and Jetson · `src/pharos/perception/` | Start fixed-camera detection on a laptop or with a short labeled clip. Start the official Jetson setup in parallel if storage is available. Generate sample detections for both camera roles. | B gets the table-zone overlay. C gets left/center/right observations. D gets live and replay adapters, package pins, camera settings, and measured frame age. |
+| B · Arm and safety · `src/pharos/arm/`, `config/bench.local.json` | Photograph SKU and controller labels, locate the exact manual, verify supply and supported USB transport, inspect startup behavior, and start the fake arm adapter. Work with D on the stand and zone. | D gets fake and model-specific adapters, model/firmware, verified pose plan, power-stop and recovery evidence. Only B or the designated replacement operates the live arm. |
+| C · Glasses and interaction · `src/pharos/interaction/`, `firmware/glasses/` | Build push-to-talk intent mapping and prerecorded audio with mock events. Try the ESP32-S3 only after the board and camera are identified. Prepare a tethered camera or seated camera proxy. | D gets identical typed/proxy/voice intents and an audio/text announcer. A gets camera URL or USB device and frame format. C owns optional independent proximity cue. |
+| D · Integration and demo · `src/pharos/coordinator.py`, `tests/`, submission | Publish v1 contract, shared fixture and mock launch path. Secure fixture materials with B, reserve test slots and draft submission. | All get the integrated mock run, release SHA, gate decisions and evidence. D owns merges, versioned fixture configuration template, fallback selection and demo clock. |
 
-| Component | Status | Role | Initial verification |
-|---|---|---|---|
-| NVIDIA Jetson Nano | In hand | Edge inference and coordination | Exact SKU, OS, power, CUDA, working camera |
-| Waveshare robotic arm | In hand | Physical manipulation | Exact model, supply, control interface, gripper, base holes |
-| ESP32-S3 camera board | To verify | Glasses video capture | Camera and Wi-Fi stream |
-| Depth camera or fixed camera | To verify | Object localization | Driver and coordinate calibration |
-| Microphone, speaker, proximity sensor | To verify | Voice/audio and local obstacle feedback | I/O and latency |
-| Rigid harness and emergency cutoff | To build | Mechanical fit and safety | Off-body testing first |
+Work on short topic branches. Review boundary changes with both owners before merging. A and C can develop from sample observations, B from fake commands, and D from fake camera and arm adapters. Keep camera tooling, OS setup, head mount, and firmware off the path to the first verified stand pick. Use one dedicated host for the arm's USB connection. Keep a copy of the known-good commit, dependencies, audio and demo configuration on the laptop.
 
-## MVP acceptance criteria
+## Scope and system
 
-- Live glasses/camera stream reaches the inference computer.
-- Lightweight YOLO detector identifies at least two demonstration object classes.
-- System responds to a spoken request with an object name and approximate direction.
-- An independently operating local proximity alert can issue a warning without network inference.
-- Shared object state carries timestamp, label, confidence, camera-frame coordinates and, when available, 3D position.
-- Robot responds to a tested home/stop/pose/gripper command set on a fixed test fixture.
-- Camera-to-robot calibration maps a small, marked tabletop area to robot reach.
-- The robot grasps a light object and delivers it to a tray with deterministic motion and a human-initiated approval step.
-- Full end-to-end voice-to-retrieval demonstration runs repeatedly with an emergency power stop tested.
+**Core MVP**
 
-## Architecture
+- One upright, lightweight, empty plastic bottle. Use one tested geometry, no glass/liquid, a physical placement jig, and a fixed tray within the verified arm envelope. The target must be correctly seated in the jig. The fixed camera must see one qualified bottle in that zone before retrieval.
+- Seated object guidance from a head-mounted camera or a camera proxy. Speak camera-relative left, center or right with a caption. A table camera can support both roles in a disclosed single-camera fallback.
+- User requests find and retrieve through a restricted push-to-talk vocabulary. A keyboard or large-button panel exercises the same workflow. A separate local spotter confirmation is required for movement.
+- Stand-only pick and tray placement with a physical motor-power cut-off, software stop, bounded teach points, and bench acceptance. Show static fit separately if B and D verify a secure supported mount with power disconnected. Use a dummy mass or mannequin if fit is uncertain.
 
-```text
-Glasses camera / mic ──> Jetson perception ──> shared object state
-                                             │
-Voice command ──> intent interpreter ──> task coordinator
-                                             │
-                                             v
-                             reachability + safety checks
-                                             │
-                                             v
-                                  Waveshare arm controller
-                                             │
-                                             v
-                                     grasp → tray placement
+**Stretch after core acceptance**, in order: use the actual ESP32-S3 glasses capture and Jetson together if either is still on fallback; standalone proximity warning with a local sensor and cue; second guidance-only object; second qualified pickup zone; richer audio or scene summaries. Proximity is a stationary demonstration of a local warning. Real-world walking guidance, body-contact assistance, and powered wearable motion are outside this sprint.
 
-Local distance sensor ──> local alert actuator (independent)
+```mermaid
+flowchart LR
+    G[Glasses or proxy camera] --> P[Local perception]
+    T[Fixed tabletop camera] --> P
+    P -->|Head observations| C[Coordinator]
+    P -->|Fresh table-zone observation| C
+    I[Voice or keyboard intent] --> C
+    C --> A[Audio and captions]
+    S[Local spotter approval and enable] --> C
+    C -->|One validated pose sequence| R[Exclusive USB arm adapter]
+    R --> W[Waveshare on rigid stand]
+    E[Physical motor-power cut-off] --> W
+    L[Optional local proximity sensor] --> B[Independent cue]
 ```
 
-**Inference fallback:** If the Jetson is an original Nano, use lightweight YOLO; offload larger VLM requests to a laptop or supported service. VLM output never drives servos directly.
+Prefer one Python process on Jetson or laptop. Use OpenCV for capture and either an offline lightweight detector or a distinctive, controlled marker/color cue for the single bottle. Recognition on head camera provides guidance. Table vision gates access to a known jig pose via an image-space region and fixture reference marks. Arm pose and joint bounds come from supervised teaching. See the [contracts](PHAROS_Interfaces.md) for timeouts, stop behavior, observation validation and payloads.
 
-## Team split
+## Hardware and dependency decisions
 
-1. **Perception/Jetson:** OS bring-up, video capture, YOLO, inference API, detection timings.
-2. **Manipulation/arm:** Independent arm testing, poses, gripper, calibration, end-effector tests, cut-off.
-3. **Glasses/interaction:** ESP32 video streaming, microphone and audio, obstacle sensing, voice interface.
-4. **Integration/mechanical/demo:** Shared state, workflow orchestration, rigid harness/test stand, UI, evaluation and presentation.
+| Dependency | Verify or obtain | Decision and fallback |
+| --- | --- | --- |
+| Jetson Orin Nano | Official developer kit versus third-party carrier, UEFI version, target microSD/NVMe, installer USB, correct PSU, display/keyboard and camera. | The NVIDIA developer-kit ISO workflow uses a USB installer and separate target storage. Verify the hardware and firmware path before flashing. If bring-up is incomplete at H7 or takes more than 60 min from first work, use the prepared laptop for integration. Stage Jetson work separately. [NVIDIA quick start](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/quick_start.html) |
+| Waveshare arm | Exact model/firmware, gripper and fasteners, documented power and startup behavior, known-good USB data cable, model-specific command and feedback support. | Keep fake arm until the manual and bench prerequisites are verified. Sample commands and limits for another model are unsuitable. [Waveshare M2-S reference](https://www.waveshare.com/wiki/RoArm-M2-S) · [Waveshare M3 reference](https://www.waveshare.com/wiki/RoArm-M3) |
+| Stand and cut-off | Rigid base bolted/clamped to a stable table, physical disconnect within spotter reach, separation/marking, strain relief, unobstructed drop area. | D builds fixture, B qualifies it. Enable real movement only after [bench preflight](PHAROS_Bench_and_Demo.md). Use the hardware table for missing parts and demo simulation if the setup cannot be qualified. |
+| Glasses | Exact ESP32-S3 board, sensor, PSRAM/pinout, mount and power. Bring UVC webcam plus spare data cables, host speaker/headphones and mic. | Try JPEG/MJPEG on private network as a timeboxed adapter. At H7 use tethered UVC or camera proxy if the stream fails. The fixed camera works over USB regardless. [Espressif camera driver](https://github.com/espressif/esp32-camera) |
+| Software | Python venv; OpenCV with verified capture backend; pyserial or required vendor transport; pytest; local audio clips; optional ASR or detector runtime and weights. | A/D record exact tested versions and OS per host once verified. Keep core control standard-library Python; skip GPU/CUDA if the first path works on CPU. No cloud or venue Wi-Fi dependency in the minimum demo. Keep model files locally with source/checksum and follow their license. |
+| Event | Devpost/portal access, all four names, required fields and judging setup. | D checks portal deadlines and confirms eligibility of any pre-event work with organizers. Record baseline commit and when implementation started. [HackUMass XIV schedule and FAQ](https://www.hackumass.com/) |
 
-## 36-hour milestones
+## Repository map
 
-| Milestone | Hours | Deliverable | Exit gate |
-|---|---|---|---|
-| M0 | H0–H2 | Inventory, roles, hardware audit | Exact models and power confirmed |
-| M1 | H2–H7 | Jetson, glasses and robot independently working | Camera+YOLO, robot jog, audio alert |
-| M2 | H7–H12 | Shared object coordinates and robot interface | Target selected; reachable pose validated |
-| M3 | H12–H18 | First autonomous table grasp | One object grasped and placed on fixed fixture |
-| M4 | H18–H24 | End-to-end voice-to-retrieval | Single complete demo works |
-| M5 | H24–H29 | Reliability, safety and mounting | E-stop tested, repeatable trials, fit demo unpowered |
-| M6 | H29–H33 | Polish, video and pitch | Recorded fallback and quantified test results |
-| M7 | H33–H36 | Freeze, rehearse and submit | Demo rehearsed; repository and submission ready |
+Current baseline was the original plan at `e23659e`. This planning update adds the entry point, contracts and runbook. Create the implementation folders as their owners land working code.
 
-## Feature backlog
+```text
+README.md
+docs/                     build plan, contracts, bench/demo runbook
+src/pharos/
+  contracts.py            shared v1 data models and validation (D)
+  coordinator.py          commands, state machine, logs, entry point (D)
+  perception/             USB/replay capture, observations and table zone (A)
+  arm/                    fake adapter, pose validation and vendor adapter (B)
+  interaction/            voice/button/CLI input, audio/caption output (C)
+config/
+  bench.example.json      documented fixture configuration shape (D and B)
+  bench.local.json        validated per-fixture values, local and ignored
+firmware/glasses/         optional verified board firmware (C)
+tests/fixtures/           synthetic inputs or approved short captures (A and D)
+tests/                    contracts, fake integration, fault injection (D)
+pyproject.toml            runtime/test packaging and dependency definitions (D)
+```
 
-**MVP:** Camera feed; YOLO detection; short object announcements; local obstacle warnings; voice intent; shared detection/coordinate data; robot home/stop/gripper API; grasp and tray placement; safe off-body actuation; wearable harness fit demonstration.
+Proposed implementation entry points are `python -m pharos.coordinator --mode mock`, `python -m pharos.coordinator --mode bench --config config/bench.local.json` and `python -m pytest -q`. D documents install and launch commands tested on the chosen host when the entry points land. Ignore local fixture config, environments and raw recordings. Publish shared small fixtures with no identifiable faces or voices.
 
-**Extended goals:** Spatial audio; multiple-object disambiguation; VLM scene summaries; multimodal task plans; grasp retries and verification; event logs/dashboard; more everyday objects; improved wearable packaging.
+## Timeline and integration gates
 
-**Not in this prototype:** Fully autonomous walking navigation, body-contact grasping, feeding, or powered motion of an unvalidated arm worn by a person.
+H0 is Friday Nov 13 at 8:30 p.m. EST. H36 is Sunday at 8:30 a.m. EST. Published portal milestones are Sunday midnight (H27.5) and 9 a.m. (H36.5), with judging at 12:30 p.m. EST. Plan against the earliest confirmed cutoff. If the event is underway, use elapsed H from Friday and preserve submission buffers. [HackUMass XIV schedule](https://www.hackumass.com/)
 
-## Safety and validation
+| Deadline | Owners and checkpoint | Evidence to exit or downgrade |
+| --- | --- | --- |
+| H0–H2 · Fri 10:30 p.m. | Everyone takes a role. A checks storage/camera, B verifies model and safe supply, C selects camera/audio input, D writes v1 fixture/schema and opens the submission draft. | Four owners, hardware facts or explicit unknowns, and configuration on record. If late, do this in 15 min. |
+| H4 · Sat 12:30 a.m. | D runs prerecorded detection + keyboard + fake arm with C. B practices stop/recovery in fake mode while preparing stand. | One find → retrieve → approve → complete trace and one expired approval trace with zero arm moves. Run this as the first software gate even when starting late. |
+| H7 · Sat 3:30 a.m. | A/C prove capture and audio on the chosen baseline. B/D confirm power, mounting and cut-off readiness. | Live frames with timestamps, one spoken cue, and fake commands. Commit to laptop/UVC if Jetson or ESP32 is late. Keep arm simulated until preflight clears. |
+| H12 · Sat 8:30 a.m. | A/B/D lock camera, jig and tray layout. B qualifies stand, dry path and physical stop with D spotting. D connects live table observations to fake arm. | Positive and invalid-zone cases, verified motion envelope and recovery evidence, and no live motion from untrusted sources. If stand or cut-off fails, no powered demo. |
+| H18 · Sat 2:30 p.m. | B/D demonstrate first spotter-approved live table pick from the coordinator. C uses keyboard until voice is ready. | Complete lift → tray → park once with event trace and independently observed drop. If only a taught cycle works, record supervised isolated motion and keep fixing integration through H24. |
+| H24 · Sat 8:30 p.m. | All rehearse full interaction, then start the frozen-layout reliability suite. | Real selected camera or disclosed proxy, audio and captions, fresh table vision, approval, retrieval and observed deposit on the same configuration. Select backup tier if full chain is unstable. |
+| H26 · Sat 10:30 p.m. | D drafts the upload and captures the best passing demonstration with B/C. | Draft text, video or pictures and actual evidence. Submit initial entry by H27 (11:30 p.m.) and verify receipt before midnight. |
+| H29 · Sun 1:30 a.m. | D/B finish acceptance matrix; C proves static fit or uses dummy; A validates cold start and offline files. | Ten trials plus failure checks on final live setup, or select a fallback. Record video, configuration and logs. |
+| H33 · Sun 5:30 a.m. | Freeze code and physical layout. Rehearse shipped path and backup. | Known-good SHA, restored configuration, intact markings, offline media, and two rehearsals. Re-run live preflight if the fixture moves. |
+| H35–H36 · Sun 7:30–8:30 a.m. | D submits final entry, verifies receipt and assigns judge roles. | Repository, video, credits, limitations and measured results attached. Judges at 12:30 p.m.; verify demo area and power-stop setup before energizing. |
 
-- Keep the powered arm on a stable, rigid stand or mannequin until the mounting system has been independently evaluated for human-worn motion.
-- Use a physical motor-power disconnect, reduced speed, joint/workspace limits, clear pinch-zone marking and a supervised test area.
-- Do not place the active gripper near the wearer’s face, neck, hands or torso.
-- Test no-object homing, single-joint movements, worst-case reach, emergency power cut and safe recovery before autonomous tasks.
-- Record success rate across at least ten identical object-retrieval trials, failure categories, and median task duration. Do not imply clinical validation.
+D records each gate as `time | SHA | mode | passed/failed | evidence | decision | owner`. When a checkpoint fails, preserve the last working configuration, make the fallback decision on time, and keep troubleshooting away from the demo fixture. Rotate operators and build in rest. Pause powered work any time the two-person team is unavailable.
 
-## Primary demo script
-
-1. Show the wearable harness on a person with motor power disconnected.
-2. Transfer the arm to a rigid stand/mannequin and verify the physical stop.
-3. User says: “Find my bottle.”
-4. Glasses/AI indicate the bottle’s direction and selected target.
-5. User says: “Bring it to the tray.”
-6. Confirm motion, retrieve the lightweight bottle, and place it in the tray.
-7. Show obstacle-alert feedback separately and report measured grasp reliability.
-
-## Immediate next actions
-
-- Read exact Jetson and Waveshare model labels and document power specs.
-- Boot Jetson, check camera and inference dependencies.
-- Verify arm control using its supported interface, initially with no load.
-- Pick a fixed tabletop layout and two lightweight objects.
-- Agree on one object-state JSON format and an arm-command API before independent implementation.
-- Record milestone gates and a repeatable demonstration video.
+See the [bench and demo runbook](PHAROS_Bench_and_Demo.md) for setup, stop drills, acceptance tests, judging and fallback tiers.
