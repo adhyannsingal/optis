@@ -1,6 +1,8 @@
-# PHAROS | HackUMass XIV build plan
+# PHAROS build plan
 
-Four people · 36 hours · Amherst, MA
+Four people · 36 hours
+
+Use the [revised integration plan](PHAROS_Integration_Review.md) for current feature scope, owners and milestone decisions. This baseline gives the original tabletop fixture and bench plan.
 
 PHAROS explores how camera-equipped glasses, audio cues, and a body-mountable arm could assist people with visual and upper-limb impairments. For judging, a seated participant requests a lightweight bottle, hears its approximate direction, and requests retrieval. The stand-mounted arm transfers the bottle from a marked pickup zone to a tray after a spotter approves. The participant accesses the tray after motion is disabled and the spotter clears it. Show the wearable fit separately with the drive supply and power-capable tether disconnected.
 
@@ -54,7 +56,7 @@ Prefer one Python process on Jetson or laptop. Use OpenCV for capture and either
 | Stand and cut-off | Rigid base bolted/clamped to a stable table, physical disconnect within spotter reach, separation/marking, strain relief, unobstructed drop area. | D builds fixture, B qualifies it. Enable real movement only after [bench preflight](PHAROS_Bench_and_Demo.md). Use the hardware table for missing parts and demo simulation if the setup cannot be qualified. |
 | Glasses | Exact ESP32-S3 board, sensor, PSRAM/pinout, mount and power. Bring UVC webcam plus spare data cables, host speaker/headphones and mic. | Try JPEG/MJPEG on private network as a timeboxed adapter. At H7 use tethered UVC or camera proxy if the stream fails. The fixed camera works over USB regardless. [Espressif camera driver](https://github.com/espressif/esp32-camera) |
 | Software | Python venv; OpenCV with verified capture backend; pyserial or required vendor transport; pytest; local audio clips; optional ASR or detector runtime and weights. | A/D record exact tested versions and OS per host once verified. Keep core control standard-library Python; skip GPU/CUDA if the first path works on CPU. No cloud or venue Wi-Fi dependency in the minimum demo. Keep model files locally with source/checksum and follow their license. |
-| Event | Devpost/portal access, all four names, required fields and judging setup. | D checks portal deadlines and confirms eligibility of any pre-event work with organizers. Record baseline commit and when implementation started. [HackUMass XIV schedule and FAQ](https://www.hackumass.com/) |
+| Event | Devpost/portal access, all four names, required fields and judging setup. | D checks portal deadlines and confirms eligibility of any pre-event work with organizers. Record baseline commit and when implementation started. |
 
 ## Repository map
 
@@ -82,20 +84,20 @@ Proposed implementation entry points are `python -m pharos.coordinator --mode mo
 
 ## Timeline and integration gates
 
-H0 is Friday Nov 13 at 8:30 p.m. EST. H36 is Sunday at 8:30 a.m. EST. Published portal milestones are Sunday midnight (H27.5) and 9 a.m. (H36.5), with judging at 12:30 p.m. EST. Plan against the earliest confirmed cutoff. If the event is underway, use elapsed H from Friday and preserve submission buffers. [HackUMass XIV schedule](https://www.hackumass.com/)
+H0 is the start of the build. Use H27 and H35–H36 as internal submission targets and adjust them to the earliest confirmed portal deadline.
 
 | Deadline | Owners and checkpoint | Evidence to exit or downgrade |
 | --- | --- | --- |
-| H0–H2 · Fri 10:30 p.m. | Everyone takes a role. A checks storage/camera, B verifies model and safe supply, C selects camera/audio input, D writes v1 fixture/schema and opens the submission draft. | Four owners, hardware facts or explicit unknowns, and configuration on record. If late, do this in 15 min. |
-| H4 · Sat 12:30 a.m. | D runs prerecorded detection + keyboard + fake arm with C. B practices stop/recovery in fake mode while preparing stand. | One find → retrieve → approve → complete trace and one expired approval trace with zero arm moves. Run this as the first software gate even when starting late. |
-| H7 · Sat 3:30 a.m. | A/C prove capture and audio on the chosen baseline. B/D confirm power, mounting and cut-off readiness. | Live frames with timestamps, one spoken cue, and fake commands. Commit to laptop/UVC if Jetson or ESP32 is late. Keep arm simulated until preflight clears. |
-| H12 · Sat 8:30 a.m. | A/B/D lock camera, jig and tray layout. B qualifies stand, dry path and physical stop with D spotting. D connects live table observations to fake arm. | Positive and invalid-zone cases, verified motion envelope and recovery evidence, and no live motion from untrusted sources. If stand or cut-off fails, no powered demo. |
-| H18 · Sat 2:30 p.m. | B/D demonstrate first spotter-approved live table pick from the coordinator. C uses keyboard until voice is ready. | Complete lift → tray → park once with event trace and independently observed drop. If only a taught cycle works, record supervised isolated motion and keep fixing integration through H24. |
-| H24 · Sat 8:30 p.m. | All rehearse full interaction, then start the frozen-layout reliability suite. | Real selected camera or disclosed proxy, audio and captions, fresh table vision, approval, retrieval and observed deposit on the same configuration. Select backup tier if full chain is unstable. |
-| H26 · Sat 10:30 p.m. | D drafts the upload and captures the best passing demonstration with B/C. | Draft text, video or pictures and actual evidence. Submit initial entry by H27 (11:30 p.m.) and verify receipt before midnight. |
-| H29 · Sun 1:30 a.m. | D/B finish acceptance matrix; C proves static fit or uses dummy; A validates cold start and offline files. | Ten trials plus failure checks on final live setup, or select a fallback. Record video, configuration and logs. |
-| H33 · Sun 5:30 a.m. | Freeze code and physical layout. Rehearse shipped path and backup. | Known-good SHA, restored configuration, intact markings, offline media, and two rehearsals. Re-run live preflight if the fixture moves. |
-| H35–H36 · Sun 7:30–8:30 a.m. | D submits final entry, verifies receipt and assigns judge roles. | Repository, video, credits, limitations and measured results attached. Judges at 12:30 p.m.; verify demo area and power-stop setup before energizing. |
+| H0–H2 | Everyone takes a role. A checks storage/camera, B verifies model and safe supply, C selects camera/audio input, D writes v1 fixture/schema and opens the submission draft. | Four owners, hardware facts or explicit unknowns, and configuration on record. If late, do this in 15 min. |
+| H4 | D runs prerecorded detection + keyboard + fake arm with C. B practices stop/recovery in fake mode while preparing stand. | One find → retrieve → approve → complete trace and one expired approval trace with zero arm moves. Run this as the first software gate even when starting late. |
+| H7 | A/C prove capture and audio on the chosen baseline. B/D confirm power, mounting and cut-off readiness. | Live frames with timestamps, one spoken cue, and fake commands. Commit to laptop/UVC if Jetson or ESP32 is late. Keep arm simulated until preflight clears. |
+| H12 | A/B/D lock camera, jig and tray layout. B qualifies stand, dry path and physical stop with D spotting. D connects live table observations to fake arm. | Positive and invalid-zone cases, verified motion envelope and recovery evidence, and no live motion from untrusted sources. If stand or cut-off fails, no powered demo. |
+| H18 | B/D demonstrate first spotter-approved live table pick from the coordinator. C uses keyboard until voice is ready. | Complete lift → tray → park once with event trace and independently observed drop. If only a taught cycle works, record supervised isolated motion and keep fixing integration through H24. |
+| H24 | All rehearse full interaction, then start the frozen-layout reliability suite. | Real selected camera or disclosed proxy, audio and captions, fresh table vision, approval, retrieval and observed deposit on the same configuration. Select backup tier if full chain is unstable. |
+| H26 | D drafts the upload and captures the best passing demonstration with B/C. | Draft text, video or pictures and actual evidence. Submit initial entry by H27 and verify receipt before the portal closes. |
+| H29 | D/B finish acceptance matrix; C proves static fit or uses dummy; A validates cold start and offline files. | Ten trials plus failure checks on final live setup, or select a fallback. Record video, configuration and logs. |
+| H33 | Freeze code and physical layout. Rehearse shipped path and backup. | Known-good SHA, restored configuration, intact markings, offline media, and two rehearsals. Re-run live preflight if the fixture moves. |
+| H35–H36 · Sun 7:30–8:30 a.m. | D submits final entry, verifies receipt and assigns judge roles. | Repository, video, credits, limitations and measured results attached. Verify the demo area and power-stop setup before energizing. |
 
 D records each gate as `time | SHA | mode | passed/failed | evidence | decision | owner`. When a checkpoint fails, preserve the last working configuration, make the fallback decision on time, and keep troubleshooting away from the demo fixture. Rotate operators and build in rest. Pause powered work any time the two-person team is unavailable.
 
