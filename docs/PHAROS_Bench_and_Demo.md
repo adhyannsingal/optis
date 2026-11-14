@@ -6,6 +6,8 @@
 
 **B · Waveshare.** Read the model and controller labels before using a reference manual. Record firmware, idle/startup movement, connector, voltage/current/polarity, supported serial settings and how to halt. Identify the data port with the vendor utility or a read-only status request. Verify permissions and stable USB device selection. Use only the verified supply and keep actuator and compute power independently controllable. The laptop can own serial if the Jetson is late. [Waveshare M2-S reference](https://www.waveshare.com/wiki/RoArm-M2-S) · [Waveshare M3 reference](https://www.waveshare.com/wiki/RoArm-M3)
 
+The earlier arm setup discussion mentions a RoArm-M2-S and an elbow-up control that did not extend the arm. Treat both as setup leads. Confirm the physical label and reproduce the symptom during the supervised unloaded joint check. If the elbow cannot reach the required taught positions reliably, isolate actuator power and switch to fake-arm integration until B resolves it.
+
 **C · Glasses.** Start with host mic, local audio, keyboard and one UVC camera. Check view orientation and usable cue latency. Timebox ESP32 bring-up after verifying board, pinout, camera and PSRAM. Use the known-good tether or stationary camera proxy if it misses H7. Demo proximity in place only if a verified sensor and local cue are available.
 
 ## Preflight for real movement
