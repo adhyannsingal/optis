@@ -1,3 +1,4 @@
+import { pharosApi, type PharosHealth, type PharosIntentKind } from "./pharosApi";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type ProductZoomConfig = {
@@ -430,14 +431,133 @@ function PharosLanding({ enterApp, prepareApp }: { enterApp: () => void; prepare
 }
 
 function PharosAppShell({ exit }: { exit: () => void }) {
+  const [health, setHealth] = useState<PharosHealth | null>(null);
+  const [connection, setConnection] = useState<"checking" | "online" | "offline">("checking");
+  const [token, setToken] = useState("");
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      try {
+        const next = await pharosApi.health();
+        if (active) {
+          setHealth(next);
+          setConnection(next.status === "ok" ? "online" : "offline");
+        }
+      } catch {
+        if (active) {
+          setHealth(null);
+          setConnection("offline");
+        }
+      }
+    };
+    void check();
+    const interval = window.setInterval(() => void check(), 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const invoke = async (kind: PharosIntentKind, item?: "keys" | "bottle", route_id?: string) => {
+    if (busy) return;
+    if (!token.trim()) {
+      setResult("Enter your local PHAROS access token to use backend commands.");
+      return;
+    }
+    setBusy(true);
+    setResult("Sending request…");
+    try {
+      const response = await pharosApi.intent(token.trim(), {
+        request_id: crypto.randomUUID(),
+        kind,
+        ...(item ? { item } : {}),
+        ...(route_id ? { route_id } : {}),
+      });
+      setResult(response.text || response.status);
+    } catch (error) {
+      setResult(error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="pharos-app-shell">
       <div className="app-shell-brand">PHAROS</div>
-      <div className="app-ready-state">
-        <span aria-hidden="true" />
-        <p>Application ready</p>
+      <div className="app-console">
+        <div className="app-ready-state" role="status" aria-live="polite">
+          <span className={connection === "online" ? "is-connected" : ""} aria-hidden="true" />
+          <p>
+            {connection === "checking"
+              ? "Checking local backend…"
+              : connection === "online"
+                ? "Local backend connected"
+                : "Local backend offline"}
+          </p>
+        </div>
+        {health && (
+          <p className="app-device-note">
+            Camera: {health.camera} · Route:{" "}
+            {health.live_route_configured ? "configured" : "demo only"} · Arm: {health.arm}
+          </p>
+        )}
+        <label className="app-token-label" htmlFor="pharos-token">
+          Local access token
+        </label>
+        <input
+          id="pharos-token"
+          className="app-token"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder="Enter token for protected commands"
+        />
+        <div className="app-actions" aria-label="Local PHAROS commands">
+          <button disabled={busy || connection !== "online"} onClick={() => void invoke("scene")}>
+            Describe scene
+          </button>
+          <button
+            disabled={busy || connection !== "online"}
+            onClick={() => void invoke("find", "bottle")}
+          >
+            Find bottle
+          </button>
+          <button
+            disabled={busy || connection !== "online"}
+            onClick={() => void invoke("find", "keys")}
+          >
+            Find keys
+          </button>
+          <button
+            disabled={busy || connection !== "online"}
+            onClick={() => void invoke("start_route", undefined, "standard")}
+          >
+            Start demo route
+          </button>
+          <button disabled={busy || connection !== "online"} onClick={() => void invoke("next")}>
+            Next cue
+          </button>
+          <button disabled={busy || connection !== "online"} onClick={() => void invoke("stop")}>
+            Stop route
+          </button>
+        </div>
+        {result && (
+          <p className="app-response" role="status" aria-live="polite">
+            {result}
+          </p>
+        )}
+        <p className="app-device-note">
+          Only confirmed API responses are displayed. Hardware retrieval remains disabled.
+        </p>
       </div>
-      <button onClick={exit}>Return to landing</button>
+      <button className="app-return-button" onClick={exit}>
+        Return to landing
+      </button>
     </main>
   );
 }
