@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import math
+from time import monotonic
 
 from .routes import FixtureRouteProvider, validate_route
 
@@ -26,6 +27,7 @@ class Thresholds:
     approach_window: float = 12
     max_corner_skip: float = 25
     reroute_cooldown: float = 30
+    advance_distance: float = 20
 
     def __post_init__(self):
         if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) or v <= 0 for v in vars(self).values()):
@@ -80,6 +82,7 @@ class Navigation:
         self.step = 0
         self.event_index = 0
         self.last_timestamp = None
+        self.started_at = None
         self.last_now = None
         self.previous_point = None
         self.weak = False
@@ -89,17 +92,21 @@ class Navigation:
         self.last_reroute = -math.inf
         self.arrival_count = 0
         self.last_cue = None
+        self.last_state = None
+        self.warned_steps = set()
 
     def cue(self, status, text, *, announce=True, **data):
         text = text if self.live else 'Simulation: ' + text
         result = dict(status=status, text=text, speech=text if announce else '', priority=2,
                       data=dict(simulated=not self.live, step=self.step, active=self.active, paused=self.paused, **data))
+        self.last_state = result
         if announce:
             self.last_cue = result
         return result
 
     def start(self):
         self.__init__(self.route, self.thresholds, live=self.live)
+        self.started_at = monotonic()
         if self.live:
             self.active = True
             return self.cue('route_started', f"Route {self.route['name']} started. Waiting for a fresh location fix.")
@@ -110,6 +117,7 @@ class Navigation:
     def stop(self):
         self.active = self.paused = False
         self.last_cue = None
+        self.last_state = None
         self.previous_point = None
         self.arrival_count = 0
 
@@ -225,6 +233,14 @@ class Navigation:
                     self.last_reroute = now
                 return self.cue('detour', 'sustained detour detected. Route progress is paused.', reroute_due=due)
             return self.cue('off_route', 'off the route; progress paused.', announce=False)
+        if self.live and not final_step and self.step not in self.warned_steps and not recovered and (
+            self.last_cue and self.last_cue['status'] not in {'route_started', 'route_resumed'} and
+            length >= limits.advance_distance and cross_track <= limits.corridor and
+            0 < length - along <= limits.advance_distance
+        ):
+            self.warned_steps.add(self.step)
+            self.previous_point = point
+            return self.cue('advance_turn', 'Approaching a turn. ' + self.route['instructions'][self.step + 1])
         self.previous_point = point
         self.off_since = None
         self.detour_announced = False
@@ -237,7 +253,7 @@ class Navigation:
                 return self.cue('arrived', 'arrived in the destination area. This does not identify an entrance or door.')
             return self.cue('near_destination', 'near the destination area; waiting for another accurate fix.')
         self.arrival_count = 0
-        if self.live and (recovered or self.last_cue['status'] in {'route_started', 'route_resumed', 'missed_turn', 'detour'}):
+        if self.live and (recovered or (self.last_cue and self.last_cue['status'] in {'route_started', 'route_resumed', 'missed_turn', 'detour'})):
             return self.cue('guidance', self.route['instructions'][self.step])
         if recovered:
             return self.cue('signal_recovered', 'location signal recovered. ' + self.route['instructions'][self.step])
