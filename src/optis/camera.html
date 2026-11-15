@@ -89,6 +89,35 @@
       </div>
     </details>
   </section>
+  <section id="cup-simulation">
+    <h2>Cup to tray — simulation only</h2>
+    <p>Physical arm execution is disabled. All table observations and poses below are simulated.</p>
+    <form id="cup-request">
+      <label>Typed request<input name="text" value="Put the cup in the tray" required></label>
+      <button>Send cup request</button>
+      <button type="button" id="cup-stop">Stop simulated arm</button>
+    </form>
+    <output id="cup-status" aria-live="polite">Start the server with OPTIS_ARM_MODE=mock to enable this demo.</output>
+    <details>
+      <summary>Local spotter controls — separate authority</summary>
+      <label>Spotter token<input id="cup-spotter-token" type="password" autocomplete="off"></label>
+      <div class="actions">
+        <button type="button" data-cup-action="enable">Enable simulation</button>
+        <button type="button" data-cup-action="reset">Reset to disabled</button>
+      </div>
+      <form id="cup-approval">
+        <label>Exact pending task ID<input name="task_id" required autocomplete="off"></label>
+        <button>Approve once within 10 seconds</button>
+      </form>
+      <label>Simulated table condition<select id="cup-scenario">
+        <option value="valid">One cup on mark</option><option value="missing">Cup missing</option>
+        <option value="off_mark">Cup off mark</option><option value="ambiguous">Two cups</option>
+        <option value="references">Reference marks invalid</option><option value="wrong_fixture">Wrong fixture</option>
+        <option value="stale">Stale frames</option><option value="disconnected">Camera disconnected</option>
+      </select></label>
+    </details>
+    <pre id="cup-progress" aria-label="Simulated arm progress"></pre>
+  </section>
 </main>
 <script>
   const form = document.querySelector("form");
@@ -473,5 +502,6 @@
   });
   stop.addEventListener("click", () => end("Preview stopped."));
 </script>
+<script src="/v1/cup-demo/ui.js" defer></script>
 </body>
 </html>

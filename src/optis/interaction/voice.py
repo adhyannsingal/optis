@@ -21,6 +21,11 @@ def command(text):
         if query:
             return {"kind": "navigate_to", "query": query[:200]}
     normalized = re.sub(r"[^a-z0-9 ]", "", text.lower().strip())
+    normalized = " ".join(normalized.split())
+    if normalized in {"put the cup in the tray", "put the cup on the tray", "retrieve the cup"}:
+        return {"kind": "retrieve", "item": "cup"}
+    if normalized in {"stop", "stop the arm"}:
+        return {"kind": "stop"}
     if normalized in {"whats ahead", "what is ahead", "what do you see", "describe the scene"}:
         return {"kind": "scene"}
     route_commands = {
