@@ -554,3 +554,38 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+.optis-workspace {
+  display: grid;
+  align-content: start;
+  justify-items: stretch;
+  gap: 1.4rem;
+  text-align: left;
+  width: min(100%, 44rem);
+  margin-inline: auto;
+}
+
+.optis-workspace-header, .optis-actions, .optis-workspace form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.8rem;
+}
+
+.optis-workspace-header { justify-content: space-between; }
+.optis-workspace section { display: grid; gap: 0.7rem; }
+.optis-workspace h2 { font-size: 1.35rem; }
+.optis-workspace label { display: flex; align-items: center; gap: 0.5rem; }
+.optis-workspace input:not([type="checkbox"]) {
+  width: min(18rem, 58vw);
+  background: #17181d;
+  color: #fff;
+  border: 1px solid #747683;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.4rem;
+}
+.optis-workspace button:disabled { opacity: 0.55; cursor: default; }
+.optis-destinations { display: grid; gap: 0.5rem; list-style: none; }
+.optis-workspace output { min-height: 1.4em; }
+.optis-workspace a { text-decoration: underline; }
+.optis-workspace audio { width: 100%; }

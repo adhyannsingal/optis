@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from starlette.concurrency import run_in_threadpool
 
@@ -65,7 +66,7 @@ def item_result(camera, item=None):
     return "live_observation", text + ".", objects
 
 
-def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None):
+def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None, location_token=None, frontend=None):
     lock = Lock()
     navigation = None
     live_source = None
@@ -143,9 +144,10 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
 
     app = FastAPI(title="Optis", lifespan=lifespan)
 
-    def authorize(authorization):
-        if not token or not authorization or not hmac.compare_digest(
-            authorization.encode(), f"Bearer {token}".encode()
+    def authorize(authorization, *, expected=token, alternate=None):
+        if not authorization or not any(
+            hmac.compare_digest(authorization.encode(), f"Bearer {value}".encode())
+            for value in (expected, alternate) if value
         ):
             raise HTTPException(401, "A valid local Optis token is required.")
 
@@ -162,6 +164,12 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/v1/vision/announcement")
+    def vision_announcement(authorization: str | None = Header(default=None)):
+        authorize(authorization, expected=location_token or token)
+        state, event = camera.announcement() if camera else ("disabled", None)
+        return JSONResponse({"camera_state": state, "announcement": event}, headers={"Cache-Control": "no-store"})
+
     @app.get("/v1/health")
     def health():
         return {"status": "ok", "camera": camera.snapshot()[0] if camera else "disabled",
@@ -169,6 +177,12 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 "live_route_id": checked_route.route_id if checked_route else None,
                 "pedestrian_routing_configured": router is not None,
                 "voice_configured": active_voice() is not None, "arm": "disabled"}
+
+    def current_fix():
+        if not last_fix:
+            return None, None
+        packet, received, age_at_receipt = last_fix
+        return packet, age_at_receipt + monotonic() - received
 
     @app.get("/v1/status")
     def status(authorization: str | None = Header(default=None)):
@@ -180,13 +194,13 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 if latest is not None and monotonic() - latest > navigation.thresholds.max_age:
                     route_status = publish(navigation.weak_signal())
             location_status = None
-            if last_fix:
-                packet, received = last_fix
-                age = max(0, (datetime.now(UTC) - packet.fix_time_utc).total_seconds())
+            packet, age = current_fix()
+            if packet:
+                ready = usable_origin(packet, age)
                 location_status = {
                     "seq": packet.seq, "horizontal_accuracy_m": packet.horizontal_accuracy_m,
-                    "age_seconds": round(max(age, monotonic() - received), 1),
-                    "ready": usable_origin(packet, datetime.now(UTC)) and monotonic() - received <= 5,
+                    "age_seconds": round(age, 1),
+                    "usable": ready, "ready": ready,
                 }
             return {"route": route_status, "route_map": route_map(), "location": location_status,
                     "audio": speech.status(), "arm": "disabled"}
@@ -202,14 +216,13 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
     @app.post("/v1/location")
     def location(packet: PhoneFix, authorization: str | None = Header(default=None)):
         nonlocal last_fix
-        authorize(authorization)
+        authorize(authorization, alternate=location_token)
         if packet.fix_time_utc.utcoffset() is None:
             raise HTTPException(422, "Fix timestamp must include a UTC offset.")
         with lock:
-            if fix_age(packet, datetime.now(UTC)) is not None and (
-                last_fix is None or packet.fix_time_utc > last_fix[0].fix_time_utc
-            ):
-                last_fix = packet, monotonic()
+            age = fix_age(packet, datetime.now(UTC))
+            if age is not None and (last_fix is None or packet.fix_time_utc > last_fix[0].fix_time_utc):
+                last_fix = packet, monotonic(), age
             if router and (not navigation or not navigation.active or not navigation.live):
                 return {"status": "fix_received", "text": "Phone fix received. Choose a walking destination."}
             if not live_source and not checked_route:
@@ -227,11 +240,12 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             raise HTTPException(422, "Choose a walking destination.")
         selected = Destination(**request.destination.model_dump())
         with lock:
-            if not last_fix or not usable_origin(last_fix[0], datetime.now(UTC)):
-                raise HTTPException(409, "Waiting for a fresh, accurate phone GPS fix.")
-            if request.kind == "recalculate" and last_fix[0].seq <= planned_fix_seq:
+            packet, age = current_fix()
+            if not packet or not usable_origin(packet, age):
+                raise HTTPException(409, "Waiting for a fresh, accurate GPS fix.")
+            if request.kind == "recalculate" and packet.seq <= planned_fix_seq:
                 raise HTTPException(409, "Wait for a new fresh phone GPS fix before recalculating.")
-            origin = last_fix[0].lat_deg, last_fix[0].lon_deg
+            origin = packet.lat_deg, packet.lon_deg
             route_generation += 1
             generation = route_generation
         try:
@@ -248,8 +262,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         with lock:
             if generation != route_generation:
                 raise HTTPException(409, "That route request was superseded.")
-            packet = last_fix[0]
-            if not usable_origin(packet, datetime.now(UTC)) or math.hypot(
+            packet, age = current_fix()
+            if not usable_origin(packet, age) or math.hypot(
                 *route.project(packet.lat_deg, packet.lon_deg)
             ) > NavigationThresholds.corridor:
                 raise HTTPException(409, "Stay near the start of the mapped path and try again with a fresh GPS fix.")
@@ -289,9 +303,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             if not request.query or not request.query.strip():
                 raise HTTPException(422, "Enter a place name, address, or coordinates.")
             with lock:
-                origin = (last_fix[0].lat_deg, last_fix[0].lon_deg) if (
-                    last_fix and usable_origin(last_fix[0], datetime.now(UTC))
-                ) else None
+                packet, age = current_fix()
+                origin = (packet.lat_deg, packet.lon_deg) if packet and usable_origin(packet, age) else None
             try:
                 matches = router.search(request.query.strip(), origin)
             except RoutingUnavailable as error:
@@ -312,7 +325,7 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 with lock:
                     pending_destinations = (matches, monotonic() + 60)
             if len(matches) == 1:
-                text = f"Found {matches[0].name}. Choose it in the dashboard to start."
+                text = f"Found {matches[0].name}. Select it when GPS is ready."
             else:
                 names = [match.name for match in matches]
                 options = [f"{index}: {match.name}" + (
@@ -346,7 +359,7 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                     placement = store.recall(item)
                     if sighting:
                         seen = datetime.fromisoformat(sighting["seen_at"]).astimezone()
-                        label = {"keys": "a keyring", "phone": "a phone"}[item]
+                        label = {"keys": "a keyring", "phone": "a phone", "bottle": "a bottle"}[item]
                         when = seen.strftime("%I:%M:%S %p").lstrip("0")
                         if seen.date() != datetime.now().astimezone().date():
                             when = f"{seen.strftime('%b %d, %Y')} at {when}"
@@ -441,6 +454,9 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             result["voice_error"] = str(error)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
+    if frontend:
+        app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
+
     return app
 
 
@@ -466,5 +482,6 @@ def from_environment():
     key = os.getenv("XAI_API_KEY")
     key_file = os.getenv("OPTIS_XAI_KEY_FILE")
     router = Valhalla(url, os.getenv("OPTIS_PLACES_INDEX")) if (url := os.getenv("OPTIS_VALHALLA_URL")) else None
-    return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router, camera=camera,
+    return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router,
+                      location_token=os.getenv("OPTIS_LOCATION_TOKEN"), frontend=os.getenv("OPTIS_FRONTEND"), camera=camera,
                       voice=XaiVoice(key) if key else None, voice_key_file=Path(key_file) if key_file else None)

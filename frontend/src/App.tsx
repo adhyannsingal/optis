@@ -1,3 +1,4 @@
+import OptisWorkspace from "./OptisWorkspace";
 import {
   type CSSProperties,
   type RefObject,
@@ -337,25 +338,12 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
   );
 }
 
-function OptisAppShell({ exit }: { exit: () => void }) {
-  return (
-    <main className="optis-app-shell">
-      <div className="app-shell-brand">OPTIS</div>
-      <div className="app-ready-state">
-        <span aria-hidden="true" />
-        <p>Application ready</p>
-      </div>
-      <button onClick={exit}>Return to landing</button>
-    </main>
-  );
-}
-
 export default function App() {
   const [page, setPage] = useState<"landing" | "app">("landing");
 
   return page === "landing" ? (
     <OptisLanding enterApp={() => setPage("app")} />
   ) : (
-    <OptisAppShell exit={() => setPage("landing")} />
+    <OptisWorkspace exit={() => setPage("landing")} />
   );
 }

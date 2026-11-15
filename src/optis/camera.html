@@ -50,14 +50,6 @@
       <button data-find="phone">Where’s my phone?</button>
       <button data-find="bottle">Where’s my bottle?</button>
     </div>
-    <form id="memory">
-      <label>Save a place for
-        <select name="item"><option>keys</option><option>phone</option><option>bottle</option></select>
-      </label>
-      <label>Place<input name="place" maxlength="300" placeholder="Entryway table"></label>
-      <button>Save place</button>
-      <button type="button" id="forget">Clear item memory</button>
-    </form>
     <div class="actions">
       <button id="mic" disabled>Record question</button>
     </div>
@@ -79,18 +71,23 @@
       <p>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>.</p>
     </div>
     <div class="actions">
-      <button data-route="standard">Start route replay</button>
-      <button data-route="noisy">Replay weak GPS</button>
-      <button data-step="next" disabled>Next replay step</button>
       <button data-step="pause">Pause</button>
       <button data-step="resume">Resume</button>
       <button data-step="recalculate">Recalculate from new fix</button>
       <button data-step="stop">Stop</button>
-      <button id="live-route" hidden>Start checked live route</button>
     </div>
     <label><span><input id="route-audio" type="checkbox" checked> Play xAI route cues</span></label>
     <output id="route" aria-live="polite">No route started.</output>
     <output id="gps">Waiting for a phone location fix.</output>
+    <details>
+      <summary>Route test controls</summary>
+      <div class="actions">
+        <button data-route="standard">Start route replay</button>
+        <button data-route="noisy">Replay weak GPS</button>
+        <button data-step="next" disabled>Next replay step</button>
+        <button id="live-route" hidden>Start checked live route</button>
+      </div>
+    </details>
   </section>
 </main>
 <script>
@@ -103,7 +100,6 @@
   const context = canvas.getContext("2d");
   const items = document.querySelector("#items");
   const navigation = document.querySelector("#navigation");
-  const memory = document.querySelector("#memory");
   const answer = document.querySelector("#answer");
   const route = document.querySelector("#route");
   const gps = document.querySelector("#gps");
@@ -162,12 +158,6 @@
       else ask("find", {item});
     });
   });
-  memory.addEventListener("submit", event => {
-    event.preventDefault();
-    ask("remember", {item: memory.elements.item.value, place: memory.elements.place.value.trim()});
-  });
-  document.querySelector("#forget").addEventListener("click", () => ask("forget", {item: memory.elements.item.value}));
-
   function showRoute(result) {
     const message = result?.text || "No route started.";
     if (route.textContent !== message) {

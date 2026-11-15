@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct OptisLocationApp: App {
@@ -12,45 +13,64 @@ private struct LocationView: View {
     @State private var endpoint = ""
     @State private var token = ""
     @State private var status = "Idle"
+    @State private var announcement = ""
     @State private var sender: PhoneLocation?
 
     var body: some View {
         Form {
-            TextField("Location endpoint URL", text: $endpoint)
+            TextField("Optis server URL", text: $endpoint)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .disabled(sender != nil)
             SecureField("Local Optis token", text: $token)
                 .disabled(sender != nil)
-            Button(sender == nil ? "Start sending location" : "Stop sending location") {
+            Button(sender == nil ? "Start guidance" : "Stop guidance") {
                 if let sender {
                     sender.stop()
                     self.sender = nil
                     status = "Stopped"
+                    announcement = ""
                     return
                 }
-                guard let url = URL(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)),
-                      ["http", "https"].contains(url.scheme ?? ""),
-                      url.host != nil, url.path == "/v1/location", !token.isEmpty else {
-                    status = "Enter the /v1/location URL and token."
+                let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard var address = URLComponents(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)),
+                      ["http", "https"].contains(address.scheme ?? ""),
+                      let host = address.host, !host.isEmpty, address.user == nil, address.password == nil,
+                      address.query == nil, address.fragment == nil,
+                      ["", "/", "/v1/location"].contains(address.path), !trimmedToken.isEmpty else {
+                    status = "Enter the Optis server URL and the location token."
                     return
                 }
-                let sender = PhoneLocation(endpoint: url, token: token) { status = $0 }
+                address.path = "/v1/location"
+                guard let url = address.url else {
+                    status = "That Optis server URL is invalid."
+                    return
+                }
+                let sender = PhoneLocation(endpoint: url, token: trimmedToken, report: { status = $0 },
+                                           reportAnnouncement: { announcement = $0 })
                 self.sender = sender
                 status = "Waiting for a location fix."
                 sender.start()
             }
             Text(status)
+            if !announcement.isEmpty { Text(announcement) }
+            Text("Keep Optis Location open while walking.")
+                .foregroundStyle(.secondary)
+        }
+        .onChange(of: sender != nil) { _, isSending in
+            UIApplication.shared.isIdleTimerDisabled = isSending
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background, let sender {
                 sender.stop()
                 self.sender = nil
                 status = "Stopped when the app left the foreground."
+                announcement = ""
             }
         }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             sender?.stop()
             sender = nil
         }

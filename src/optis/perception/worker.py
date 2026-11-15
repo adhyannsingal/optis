@@ -4,6 +4,7 @@ from pathlib import Path
 from threading import Event, Lock, Thread
 from time import monotonic
 
+from .announcements import ChairAnnouncement
 from .capture import encode_capture
 from .http_camera import HttpCamera
 from .model import OnnxDetector
@@ -25,6 +26,7 @@ class HeadCamera:
         self.observation = None
         self.jpeg = None
         self.state = "starting"
+        self.chair_announcement = ChairAnnouncement()
         self.thread = Thread(target=self.run, name="head-camera", daemon=True)
 
     def publish(self, state, observation=None, jpeg=None):
@@ -32,6 +34,10 @@ class HeadCamera:
             self.state = state
             self.observation = observation
             self.jpeg = jpeg
+            if observation is not None:
+                self.chair_announcement.update(observation["detections"], observation["seen_ms"])
+            else:
+                self.chair_announcement = ChairAnnouncement()
 
     def snapshot(self):
         state, observation, _ = self.preview()
@@ -42,6 +48,13 @@ class HeadCamera:
             if self.observation and 0 <= monotonic() * 1000 - self.observation["seen_ms"] <= 1000:
                 return self.state, self.observation, self.jpeg
             return ("stale" if self.observation else self.state), None, None
+
+    def announcement(self):
+        with self.lock:
+            now_ms = monotonic() * 1000
+            if self.observation and now_ms - self.observation["seen_ms"] > 1000:
+                return "stale", None
+            return self.state, self.chair_announcement.snapshot(now_ms)
 
     def start(self, record):
         self.record = record
@@ -95,9 +108,10 @@ class HeadCamera:
                                 position=item["position"], pickup_zone=None,
                                 stable=tracker.tracks[item["track_id"]]["count"] >= 2,
                             ))
-                        phones = [box for box in boxes if box["label"] == "cell phone"]
-                        if len(phones) == 1 and phones[0]["stable"]:
-                            self.record("phone", seen_ms)
+                        for label, category in (("cell phone", "phone"), ("bottle", "bottle")):
+                            matches = [box for box in boxes if box["label"] == label]
+                            if len(matches) == 1 and matches[0]["stable"]:
+                                self.record(category, seen_ms)
                         self.publish("ready", dict(
                             v=1, mode="live", source="head", frame_id=frame_id,
                             seen_ms=seen_ms, size_px=[width, height], detections=boxes,

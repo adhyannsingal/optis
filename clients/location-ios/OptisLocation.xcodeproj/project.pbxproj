@@ -1,0 +1,26 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 56;
+  objects = {
+    A10000000000000000000001 = {isa = PBXBuildFile; fileRef = A10000000000000000000003; };
+    A10000000000000000000002 = {isa = PBXBuildFile; fileRef = A10000000000000000000004; };
+    A10000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptisLocationApp.swift; sourceTree = "<group>"; };
+    A10000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneLocation.swift; sourceTree = "<group>"; };
+    A10000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+    A10000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = OptisLocation.app; sourceTree = BUILT_PRODUCTS_DIR; };
+    A10000000000000000000007 = {isa = PBXGroup; children = (A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000008); sourceTree = "<group>"; };
+    A10000000000000000000008 = {isa = PBXGroup; children = (A10000000000000000000006); name = Products; sourceTree = "<group>"; };
+    A10000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002); runOnlyForDeploymentPostprocessing = 0; };
+    A10000000000000000000010 = {isa = PBXNativeTarget; buildConfigurationList = A10000000000000000000013; buildPhases = (A10000000000000000000009); buildRules = (); dependencies = (); name = OptisLocation; productName = OptisLocation; productReference = A10000000000000000000006; productType = "com.apple.product-type.application"; };
+    A10000000000000000000011 = {isa = PBXProject; attributes = {LastUpgradeCheck = 2660; }; buildConfigurationList = A10000000000000000000012; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = A10000000000000000000007; productRefGroup = A10000000000000000000008; projectDirPath = ""; projectRoot = ""; targets = (A10000000000000000000010); };
+    A10000000000000000000012 = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000014, A10000000000000000000015); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A10000000000000000000013 = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000016, A10000000000000000000017); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+    A10000000000000000000014 = {isa = XCBuildConfiguration; buildSettings = {IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Debug; };
+    A10000000000000000000015 = {isa = XCBuildConfiguration; buildSettings = {IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Release; };
+    A10000000000000000000016 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = Info.plist; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.optis.location; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+    A10000000000000000000017 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_STYLE = Automatic; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = Info.plist; MARKETING_VERSION = 0.1.0; PRODUCT_BUNDLE_IDENTIFIER = com.optis.location; PRODUCT_NAME = "$(TARGET_NAME)"; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+  };
+  rootObject = A10000000000000000000011;
+}
