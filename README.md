@@ -1,4 +1,4 @@
-# PHAROS
+# OPTIS
 
 PHAROS is an assistive prototype for route guidance, object finding, and voice-controlled tabletop retrieval.
 
