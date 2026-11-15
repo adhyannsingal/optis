@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  color: #211e1c;
-  background: #f8f8f7;
+  color: #183247;
+  background: #dceef8;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --hero-background: #f8f8f7;
-  --text-primary: #211e1c;
-  --text-secondary: #5f5955;
-  --border-primary: #aaa5a1;
+  --hero-background: #dceef8;
+  --experience-background: #102b40;
+  --text-primary: #183247;
+  --text-secondary: #506b7e;
+  --border-primary: #8daabc;
 }
 
 @layer base {
@@ -34,7 +35,7 @@
   }
 
   ::selection {
-    background: #d8d4d1;
+    background: #bbdced;
   }
 
   :focus-visible {
@@ -331,7 +332,7 @@
 .experience-root {
   min-height: 100vh;
   min-height: 100svh;
-  background: #08090b;
+  background: var(--experience-background);
 }
 
 .app-shell-layer {
@@ -367,7 +368,7 @@
   justify-content: center;
   overflow-x: hidden;
   overflow-y: auto;
-  background: #08090b;
+  background: var(--experience-background);
   color: #f4f4f2;
 }
 
@@ -606,4 +607,14 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Keep the wordmarks from flashing during the camera handoff. */
+.landing.is-zooming .stage-word {
+  color: var(--experience-background);
+  opacity: 0;
+}
+
+.app-shell-layer.is-staged .app-shell-brand {
+  color: var(--experience-background);
 }
