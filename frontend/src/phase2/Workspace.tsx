@@ -1,3 +1,4 @@
+import { canCancelRecording } from "../sessionLifecycle";
 import { destinationMatches, type Destination, type WorkspaceProps } from "./workspaceTypes";
 import { CameraFrame, RoutePreview } from "./LiveViews";
 import { modelClasses } from "./modelClasses";
@@ -384,14 +385,14 @@ export function Workspace({ exit, active, data, actions }: WorkspaceProps) {
         <Button disabled={!media.audioSource} onClick={media.playResponse}>
           Play Response
         </Button>
-        {voiceBusy && <Button onClick={media.cancelVoice}>Cancel Recording</Button>}
+        {canCancelRecording(media.voiceState) && <Button onClick={media.cancelVoice}>Cancel Recording</Button>}
       </div>
       <p className="o-voice-status" role="status">
         {media.voiceMessage ||
           (recording
             ? "Listening…"
             : media.voiceState === "sending"
-              ? "Understanding your request…"
+              ? "Processing your submitted command…"
               : "Choose a voice command or type a request in Assistant.")}
       </p>
       {live.reply?.transcript && (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { SessionRequests, appendEvent, canCancelRecording, startRecorder, disposeRecording } from "./sessionLifecycle";
 import { playCurrentCue } from "./routeAudio";
 import { optisApi, OptisApiError } from "./optisApi";
 import { useBrowserLocation } from "./useBrowserLocation";
@@ -39,14 +40,22 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   const generation = useRef(0);
   const audioEpoch = useRef(0);
   const latestStatus = useRef<BackendStatus | null>(null);
-  const acceptStatus = useCallback((next: BackendStatus) => {
-    if (latestStatus.current && next.audio.generation < latestStatus.current.audio.generation) return;
+  const session = useRef(new SessionRequests());
+  const clearSessionRef = useRef<() => void>(() => {});
+  const acceptStatus = useCallback((next: BackendStatus, ticket: ReturnType<SessionRequests["begin"]>) => {
+    if (!session.current.accept(ticket)) return;
     if (next.audio.generation !== latestStatus.current?.audio.generation) {
       audioEpoch.current += 1;
       routePlayer.current?.pause();
     }
     latestStatus.current = next;
     setStatus(next);
+  }, []);
+  const expireIfUnauthorized = useCallback((failure: unknown) => {
+    if (!(failure instanceof OptisApiError) || failure.statusCode !== 401) return false;
+    clearSessionRef.current();
+    setConnectionError("Session expired. Enter the current local token.");
+    return true;
   }, []);
   const mounted = useRef(true);
   const location = useBrowserLocation(token);
@@ -56,9 +65,9 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     return () => {
       mounted.current = false;
       generation.current += 1;
+      session.current.reset();
       if (recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
-      if (recorder.current?.state === "recording") recorder.current.stop();
-      stream.current?.getTracks().forEach((track) => track.stop());
+      disposeRecording(recorder.current, stream.current);
       player.current?.pause();
       routePlayer.current?.pause();
     };
@@ -71,22 +80,20 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     const refresh = async () => {
       if (polling) return;
       polling = true;
+      const ticket = session.current.begin();
       try {
         const [nextHealth, nextStatus] = await Promise.all([optisApi.health(), optisApi.status(token)]);
-        if (cancelled) return;
+        if (cancelled || !session.current.current(ticket)) return;
         setHealth(nextHealth);
-        acceptStatus(nextStatus);
+        acceptStatus(nextStatus, ticket);
         setAvailable(true);
         setConnectionError("");
       } catch (failure) {
-        if (cancelled) return;
+        if (cancelled || !session.current.current(ticket)) return;
         setAvailable(false);
         setHealth(null);
         setStatus(null);
-        if (failure instanceof OptisApiError && failure.statusCode === 401) {
-          setToken("");
-          setConnectionError("Session expired. Enter the current local token.");
-        } else setConnectionError(message(failure));
+        if (!expireIfUnauthorized(failure)) setConnectionError(message(failure));
       } finally {
         polling = false;
       }
@@ -106,14 +113,16 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     const refresh = async () => {
       if (polling) return;
       polling = true;
+      const ticket = session.current.begin();
       try {
         const frame = await optisApi.preview(token);
-        if (!cancelled) {
+        if (!cancelled && session.current.current(ticket)) {
           setPreview(frame);
           setCameraError("");
         }
       } catch (failure) {
-        if (!cancelled) {
+        if (!cancelled && session.current.current(ticket)) {
+          if (expireIfUnauthorized(failure)) return;
           setPreview(null);
           setCameraError(message(failure));
         }
@@ -136,6 +145,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     const take = async () => {
       if (polling) return;
       polling = true;
+      const ticket = session.current.begin();
       try {
         const epoch = audioEpoch.current;
         await playCurrentCue(
@@ -145,7 +155,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
           routePlayer.current,
         );
       } catch (failure) {
-        if (!cancelled) setVoiceMessage(`Navigation audio unavailable: ${message(failure)}`);
+        if (!cancelled && session.current.current(ticket) && !expireIfUnauthorized(failure)) setVoiceMessage(`Navigation audio unavailable: ${message(failure)}`);
       } finally {
         polling = false;
       }
@@ -166,14 +176,15 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   const cancelVoice = useCallback(() => {
     generation.current += 1;
     if (recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
-    if (recorder.current?.state === "recording") recorder.current.stop();
-    stream.current?.getTracks().forEach((track) => track.stop());
+    disposeRecording(recorder.current, stream.current);
+    recordingTimer.current = null;
     recorder.current = null;
     stream.current = null;
     setVoiceState("idle");
   }, []);
 
   const clearSession = useCallback(() => {
+    session.current.reset();
     cancelVoice();
     stopAudio();
     location.stop();
@@ -191,20 +202,23 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     setEvents([]);
     setPreviewing(false);
     setPreview(null);
+    setCameraError("");
     setAudioSource("");
   }, [cancelVoice, stopAudio, location]);
+  clearSessionRef.current = clearSession;
 
   async function connect(event: FormEvent) {
     event.preventDefault();
     const value = typedToken.trim();
     if (!value) return;
     const version = ++generation.current;
+    const ticket = session.current.begin();
     setBusy(true);
     try {
       const [nextHealth, nextStatus] = await Promise.all([optisApi.health(), optisApi.status(value)]);
       if (!mounted.current || version !== generation.current) return;
       setHealth(nextHealth);
-      acceptStatus(nextStatus);
+      acceptStatus(nextStatus, ticket);
       setToken(value);
       setTypedToken("");
       setAvailable(true);
@@ -219,12 +233,12 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
 
   function showReply(title: string, response: Reply) {
     setReply(response);
-    setEvents((previous) => [{
+    setEvents((previous) => appendEvent(previous, {
       id: crypto.randomUUID(), title,
       text: response.text ?? response.speech ?? response.status,
       status: response.status,
       time: new Date().toLocaleTimeString(),
-    }, ...previous].slice(0, 30));
+    }));
     if (response.voice_error) setVoiceMessage(response.voice_error);
   }
 
@@ -244,18 +258,20 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
       if (!mounted.current || version !== generation.current) return null;
       showReply(title, result);
       try {
+        const ticket = session.current.begin();
         const nextStatus = await optisApi.status(token);
         if (!mounted.current || version !== generation.current) return null;
-        acceptStatus(nextStatus);
+        acceptStatus(nextStatus, ticket);
       } catch (failure) {
         if (mounted.current && version === generation.current) {
+          if (expireIfUnauthorized(failure)) return null;
           setAvailable(false);
           setConnectionError(message(failure));
         }
       }
       return result;
     } catch (failure) {
-      if (mounted.current && version === generation.current) setError(message(failure));
+      if (mounted.current && version === generation.current && !expireIfUnauthorized(failure)) setError(message(failure));
       return null;
     } finally {
       if (mounted.current && version === generation.current) setBusy(false);
@@ -282,43 +298,54 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
         return;
       }
       stream.current = media;
-      const current = new MediaRecorder(media, { mimeType: format });
-      recorder.current = current;
-      const chunks: Blob[] = [];
-      current.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-      current.onerror = () => {
-        cancelVoice();
-        setVoiceMessage("Microphone recording failed.");
-      };
-      current.onstop = () => {
-        if (recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
-        media.getTracks().forEach((track) => track.stop());
-        stream.current = null;
-        recorder.current = null;
-        if (!mounted.current || version !== generation.current) return;
-        const audio = new Blob(chunks, { type: format });
-        if (!audio.size) {
-          setVoiceState("idle");
-          setVoiceMessage("No audio was recorded.");
-          return;
-        }
-        setVoiceState("sending");
-        void optisApi.voice(token, audio).then((response: VoiceReply) => {
-          if (!mounted.current || version !== generation.current) return;
-          showReply("Voice question", response);
-          setVoiceMessage(response.transcript ? `Heard: ${response.transcript}` : "Voice response received.");
-          if (response.audio && response.audio_type) setAudioSource(`data:${response.audio_type};base64,${response.audio}`);
-        }).catch((failure) => {
-          if (mounted.current && version === generation.current) setVoiceMessage(message(failure));
-        }).finally(() => {
-          if (mounted.current && version === generation.current) setVoiceState("idle");
+      try {
+        const current = startRecorder(media, () => new MediaRecorder(media, { mimeType: format }), (current) => {
+          recorder.current = current;
+          const chunks: Blob[] = [];
+          current.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+          current.onerror = () => {
+            if (!mounted.current || version !== generation.current) return;
+            cancelVoice();
+            setVoiceMessage("Microphone recording failed.");
+          };
+          current.onstop = () => {
+            if (recorder.current === current && recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
+            media.getTracks().forEach((track) => track.stop());
+            if (stream.current === media) stream.current = null;
+            if (recorder.current === current) recorder.current = null;
+            if (!mounted.current || version !== generation.current) return;
+            const audio = new Blob(chunks, { type: format });
+            if (!audio.size) {
+              setVoiceState("idle");
+              setVoiceMessage("No audio was recorded.");
+              return;
+            }
+            setVoiceState("sending");
+            void optisApi.voice(token, audio).then((response: VoiceReply) => {
+              if (!mounted.current || version !== generation.current) return;
+              showReply("Voice question", response);
+              setVoiceMessage(response.transcript ? `Heard: ${response.transcript}` : "Voice response received.");
+              if (response.audio && response.audio_type) setAudioSource(`data:${response.audio_type};base64,${response.audio}`);
+            }).catch((failure) => {
+              if (mounted.current && version === generation.current && !expireIfUnauthorized(failure)) setVoiceMessage(message(failure));
+            }).finally(() => {
+              if (mounted.current && version === generation.current) setVoiceState("idle");
+            });
+          };
         });
-      };
-      current.start();
-      setVoiceState("recording");
-      recordingTimer.current = window.setTimeout(() => {
-        if (current.state === "recording") current.stop();
-      }, 6000);
+        setVoiceState("recording");
+        recordingTimer.current = window.setTimeout(() => {
+          if (current.state === "recording") current.stop();
+        }, 6000);
+      } catch (failure) {
+        if (stream.current === media) {
+          stream.current = null;
+          recorder.current = null;
+          if (recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
+          recordingTimer.current = null;
+        }
+        throw failure;
+      }
     }).catch((failure) => {
       if (mounted.current && version === generation.current) {
         setVoiceState("idle");
@@ -344,7 +371,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
           onPreviewChange: (enabled) => { setPreviewing(enabled); if (!enabled) setPreview(null); },
           onStartVoice: startVoice,
           onStopVoice: () => { if (recorder.current?.state === "recording") recorder.current.stop(); },
-          onCancelVoice: cancelVoice,
+          onCancelVoice: () => { if (canCancelRecording(voiceState)) cancelVoice(); },
           onPlayResponse: () => { if (player.current) void player.current.play().catch(() => setVoiceMessage("Audio playback was blocked.")); },
           onStopAudio: stopAudio,
           onStartLocation: location.start,
