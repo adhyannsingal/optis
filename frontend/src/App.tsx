@@ -1,13 +1,5 @@
-import OptisWorkspace from "./OptisWorkspace";
-import {
-  type CSSProperties,
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import OptisRuntime from "./OptisRuntime";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type ProductZoomConfig = {
   imageSrc: string;
@@ -32,21 +24,6 @@ type LensGeometry = {
   overlayScale: number;
 };
 
-type CameraZoomProperties = CSSProperties & {
-  "--camera-origin-x": string;
-  "--camera-origin-y": string;
-  "--camera-translate-x": string;
-  "--camera-translate-y": string;
-  "--camera-lens-x": string;
-  "--camera-lens-y": string;
-  "--camera-lens-size": string;
-  "--camera-overlay-scale": number;
-  "--camera-fill-scale": number;
-  "--camera-zoom-scale": number;
-  "--camera-zoom-duration": string;
-  "--camera-destination": string;
-};
-
 // The focal point was measured from the red circular lens in the 1078 × 375 source asset.
 // Future hardware only needs a new source, normalized lens point, and optional scale tuning.
 const productZoomConfig: ProductZoomConfig = {
@@ -57,29 +34,37 @@ const productZoomConfig: ProductZoomConfig = {
   },
   lensDiameterRatio: 0.05,
   zoomScale: 15,
-  durationMs: 1100,
-  destinationColor: "#08090B",
+  durationMs: 1200,
+  destinationColor: "#102B40",
 };
 
 function Spectacles({
   config,
   productRef,
+  floatRef,
   imageRef,
   lensAnchorRef,
   onImageLoad,
-  zoomStyle,
 }: {
   config: ProductZoomConfig;
   productRef: RefObject<HTMLDivElement | null>;
+  floatRef: RefObject<HTMLDivElement | null>;
   imageRef: RefObject<HTMLImageElement | null>;
   lensAnchorRef: RefObject<HTMLSpanElement | null>;
   onImageLoad: () => void;
-  zoomStyle?: CameraZoomProperties;
 }) {
   return (
-    <div className="spectacles" ref={productRef} style={zoomStyle}>
-      <div className="spectacles-float">
-        <img ref={imageRef} src={config.imageSrc} alt="" aria-hidden="true" onLoad={onImageLoad} />
+    <div className="spectacles" ref={productRef}>
+      <div className="spectacles-float" ref={floatRef}>
+        <img
+          ref={imageRef}
+          src={config.imageSrc}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          fetchPriority="high"
+          onLoad={onImageLoad}
+        />
         <span
           ref={lensAnchorRef}
           className="camera-lens-anchor"
@@ -97,21 +82,23 @@ function Spectacles({
 function ProductIllustration({
   config,
   productRef,
+  floatRef,
   imageRef,
   lensAnchorRef,
   onImageLoad,
-  zoomStyle,
+  stageWordRef,
 }: {
   config: ProductZoomConfig;
   productRef: RefObject<HTMLDivElement | null>;
+  floatRef: RefObject<HTMLDivElement | null>;
   imageRef: RefObject<HTMLImageElement | null>;
   lensAnchorRef: RefObject<HTMLSpanElement | null>;
   onImageLoad: () => void;
-  zoomStyle?: CameraZoomProperties;
+  stageWordRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div className="product-illustration motion-stage">
-      <div className="stage-word" aria-hidden="true">
+      <div className="stage-word" ref={stageWordRef} aria-hidden="true">
         {"OPTIS".split("").map((letter, index) => (
           <span key={`${letter}-${index}`}>{letter}</span>
         ))}
@@ -119,10 +106,10 @@ function ProductIllustration({
       <Spectacles
         config={config}
         productRef={productRef}
+        floatRef={floatRef}
         imageRef={imageRef}
         lensAnchorRef={lensAnchorRef}
         onImageLoad={onImageLoad}
-        zoomStyle={zoomStyle}
       />
     </div>
   );
@@ -130,33 +117,37 @@ function ProductIllustration({
 
 function CameraZoomTransition({
   active,
-  zoomStyle,
+  apertureRef,
+  fillRef,
 }: {
   active: boolean;
-  zoomStyle?: CameraZoomProperties;
+  apertureRef: RefObject<HTMLDivElement | null>;
+  fillRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <div
-      className={`camera-zoom-transition ${active ? "is-active" : ""}`}
-      style={zoomStyle}
-      aria-hidden="true"
-    >
-      <div className="camera-dark-aperture">
-        <div className="camera-dark-fill" />
+    <div className={`camera-zoom-transition ${active ? "is-active" : ""}`} aria-hidden="true">
+      <div className="camera-dark-aperture" ref={apertureRef}>
+        <div className="camera-dark-fill" ref={fillRef} />
       </div>
     </div>
   );
 }
 
-function OptisLanding({ enterApp }: { enterApp: () => void }) {
+function OptisLanding({ enterApp, prepareApp }: { enterApp: () => void; prepareApp: () => void }) {
   const [zooming, setZooming] = useState(false);
-  const [lensGeometry, setLensGeometry] = useState<LensGeometry | null>(null);
   const transitionStarted = useRef(false);
-  const transitionTimer = useRef<number | null>(null);
-  const pendingFrame = useRef<number | null>(null);
+  const mounted = useRef(true);
+  const geometryRef = useRef<LensGeometry | null>(null);
+  const landingRef = useRef<HTMLDivElement>(null);
   const productRef = useRef<HTMLDivElement>(null);
+  const floatRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const lensAnchorRef = useRef<HTMLSpanElement>(null);
+  const stageWordRef = useRef<HTMLDivElement>(null);
+  const heroCopyRef = useRef<HTMLDivElement>(null);
+  const topbarRef = useRef<HTMLElement>(null);
+  const apertureRef = useRef<HTMLDivElement>(null);
+  const fillRef = useRef<HTMLDivElement>(null);
 
   const measureLens = useCallback(() => {
     const product = productRef.current;
@@ -182,50 +173,167 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
       overlayScale: (Math.hypot(window.innerWidth, window.innerHeight) / lensDiameter) * 1.08,
     };
 
-    setLensGeometry(geometry);
     return geometry;
   }, []);
 
+  const applyGeometry = useCallback((geometry: LensGeometry) => {
+    const root = landingRef.current;
+    if (!root) return;
+
+    root.style.setProperty("--camera-origin-x", `${geometry.originX}px`);
+    root.style.setProperty("--camera-origin-y", `${geometry.originY}px`);
+    root.style.setProperty("--camera-translate-x", `${geometry.translateX}px`);
+    root.style.setProperty("--camera-translate-y", `${geometry.translateY}px`);
+    root.style.setProperty("--camera-lens-x", `${geometry.lensViewportX}px`);
+    root.style.setProperty("--camera-lens-y", `${geometry.lensViewportY}px`);
+    root.style.setProperty("--camera-lens-size", `${geometry.lensDiameter}px`);
+    root.style.setProperty("--camera-destination", productZoomConfig.destinationColor);
+  }, []);
+
   useLayoutEffect(() => {
-    const frame = window.requestAnimationFrame(measureLens);
+    mounted.current = true;
+    const updateGeometry = () => {
+      const geometry = measureLens();
+      if (geometry) {
+        geometryRef.current = geometry;
+        applyGeometry(geometry);
+      }
+    };
+
+    const frame = window.requestAnimationFrame(updateGeometry);
     const onResize = () => {
-      if (!transitionStarted.current) measureLens();
+      if (!transitionStarted.current) updateGeometry();
     };
 
     window.addEventListener("resize", onResize);
     return () => {
+      mounted.current = false;
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", onResize);
     };
-  }, [measureLens]);
+  }, [applyGeometry, measureLens]);
 
-  const startTransition = useCallback(() => {
-    if (transitionStarted.current || pendingFrame.current !== null) return;
+  useLayoutEffect(() => {
+    if (!zooming || !geometryRef.current) return;
 
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
-      transitionStarted.current = true;
+    const geometry = geometryRef.current;
+    const product = productRef.current;
+    const aperture = apertureRef.current;
+    const fill = fillRef.current;
+    if (!product || !aperture || !fill) return;
+
+    const duration = productZoomConfig.durationMs;
+    const movementEasing = "cubic-bezier(0.76, 0, 0.24, 1)";
+    const fillScale = geometry.overlayScale / productZoomConfig.zoomScale;
+    const movementKeyframes: Keyframe[] = [
+      { transform: "translate3d(0, 0, 0) scale(1)", offset: 0 },
+      { transform: "translate3d(0, 0, 0) scale(1)", offset: 0.12 },
+      {
+        transform: `translate3d(${geometry.translateX}px, ${geometry.translateY}px, 0) scale(${productZoomConfig.zoomScale})`,
+        offset: 1,
+      },
+    ];
+
+    const animations = [
+      product.animate(movementKeyframes, {
+        duration,
+        easing: movementEasing,
+        fill: "forwards",
+      }),
+      aperture.animate(movementKeyframes, {
+        duration,
+        easing: movementEasing,
+        fill: "forwards",
+      }),
+      fill.animate(
+        [
+          { opacity: 0, transform: "scale(0.3)", offset: 0 },
+          { opacity: 0, transform: "scale(0.3)", offset: 0.42 },
+          { opacity: 0.22, transform: "scale(1)", offset: 0.6 },
+          { opacity: 0.97, transform: `scale(${fillScale * 0.44})`, offset: 0.8 },
+          { opacity: 1, transform: `scale(${fillScale})`, offset: 1 },
+        ],
+        {
+          duration,
+          easing: "cubic-bezier(0.32, 0, 0.1, 1)",
+          fill: "forwards",
+        },
+      ),
+      ...[stageWordRef.current, heroCopyRef.current, topbarRef.current]
+        .filter((element): element is HTMLElement => element !== null)
+        .map((element) =>
+          element.animate([{ opacity: 1 }, { opacity: 0 }], {
+            duration: 380,
+            easing: "ease-out",
+            fill: "forwards",
+          }),
+        ),
+    ];
+
+    const timelineStart = document.timeline.currentTime;
+    if (timelineStart !== null) {
+      animations.forEach((animation) => {
+        animation.startTime = timelineStart;
+      });
+    }
+
+    let cancelled = false;
+    void animations[0].finished.then(() => {
+      if (!cancelled && mounted.current) enterApp();
+    });
+
+    return () => {
+      cancelled = true;
+      animations.forEach((animation) => animation.cancel());
+    };
+  }, [enterApp, zooming]);
+
+  const startTransition = useCallback(async () => {
+    if (transitionStarted.current) return;
+    transitionStarted.current = true;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       enterApp();
       return;
     }
 
-    const attemptTransition = () => {
-      pendingFrame.current = null;
-      if (transitionStarted.current) return;
+    const image = imageRef.current;
+    const floatingProduct = floatRef.current;
+    if (!image || !floatingProduct) {
+      enterApp();
+      return;
+    }
 
-      const measuredGeometry = measureLens();
-      if (!measuredGeometry) {
-        pendingFrame.current = window.requestAnimationFrame(attemptTransition);
+    try {
+      await image.decode();
+    } catch {
+      if (!image.complete || image.naturalWidth === 0) {
+        enterApp();
         return;
       }
+    }
 
-      transitionStarted.current = true;
-      setZooming(true);
-      transitionTimer.current = window.setTimeout(enterApp, productZoomConfig.durationMs);
-    };
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+    });
+    if (!mounted.current) return;
 
-    attemptTransition();
-  }, [enterApp, measureLens]);
+    const frozenFloatTransform = window.getComputedStyle(floatingProduct).transform;
+    floatingProduct.style.animation = "none";
+    floatingProduct.style.transform =
+      frozenFloatTransform === "none" ? "translate3d(0, 0, 0)" : frozenFloatTransform;
+
+    const geometry = measureLens();
+    if (!geometry) {
+      enterApp();
+      return;
+    }
+
+    geometryRef.current = geometry;
+    applyGeometry(geometry);
+    prepareApp();
+    setZooming(true);
+  }, [applyGeometry, enterApp, measureLens, prepareApp]);
 
   useEffect(() => {
     let touchStart = 0;
@@ -271,34 +379,11 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
       if (wheelResetTimer !== null) {
         window.clearTimeout(wheelResetTimer);
       }
-      if (pendingFrame.current !== null) {
-        window.cancelAnimationFrame(pendingFrame.current);
-      }
-      if (transitionTimer.current !== null) {
-        window.clearTimeout(transitionTimer.current);
-      }
     };
   }, [startTransition]);
 
-  const zoomStyle = lensGeometry
-    ? ({
-        "--camera-origin-x": `${lensGeometry.originX}px`,
-        "--camera-origin-y": `${lensGeometry.originY}px`,
-        "--camera-translate-x": `${lensGeometry.translateX}px`,
-        "--camera-translate-y": `${lensGeometry.translateY}px`,
-        "--camera-lens-x": `${lensGeometry.lensViewportX}px`,
-        "--camera-lens-y": `${lensGeometry.lensViewportY}px`,
-        "--camera-lens-size": `${lensGeometry.lensDiameter}px`,
-        "--camera-overlay-scale": lensGeometry.overlayScale,
-        "--camera-fill-scale": lensGeometry.overlayScale / productZoomConfig.zoomScale,
-        "--camera-zoom-scale": productZoomConfig.zoomScale,
-        "--camera-zoom-duration": `${productZoomConfig.durationMs}ms`,
-        "--camera-destination": productZoomConfig.destinationColor,
-      } satisfies CameraZoomProperties)
-    : undefined;
-
   return (
-    <div className={`landing ${zooming ? "is-zooming" : ""}`}>
+    <div ref={landingRef} className={`landing ${zooming ? "is-zooming" : ""}`}>
       <button
         className="skip-link"
         onClick={() => document.getElementById("main-content")?.focus()}
@@ -306,9 +391,9 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
         Skip to content
       </button>
 
-      <nav className="topbar" aria-label="Public navigation">
+      <nav className="topbar" ref={topbarRef} aria-label="Public navigation">
         <button className="enter-button" onClick={startTransition}>
-          <span>Explore Optis</span>
+          <span>Explore OPTIS</span>
           <span className="enter-arrow" aria-hidden="true">
             ↗
           </span>
@@ -320,12 +405,19 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
           <ProductIllustration
             config={productZoomConfig}
             productRef={productRef}
+            floatRef={floatRef}
             imageRef={imageRef}
             lensAnchorRef={lensAnchorRef}
-            onImageLoad={measureLens}
-            zoomStyle={zoomStyle}
+            onImageLoad={() => {
+              const geometry = measureLens();
+              if (geometry) {
+                geometryRef.current = geometry;
+                applyGeometry(geometry);
+              }
+            }}
+            stageWordRef={stageWordRef}
           />
-          <div className="hero-copy">
+          <div className="hero-copy" ref={heroCopyRef}>
             <h1 id="hero-title" className="display-title">
               Your world. <span>Within reach.</span>
             </h1>
@@ -333,17 +425,29 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
         </section>
       </main>
 
-      <CameraZoomTransition active={zooming} zoomStyle={zoomStyle} />
+      <CameraZoomTransition active={zooming} apertureRef={apertureRef} fillRef={fillRef} />
     </div>
   );
 }
 
 export default function App() {
-  const [page, setPage] = useState<"landing" | "app">("landing");
+  const [page, setPage] = useState<"landing" | "transitioning" | "app">("landing");
+  const enterApp = useCallback(() => setPage("app"), []);
+  const prepareApp = useCallback(() => setPage("transitioning"), []);
+  const exitApp = useCallback(() => setPage("landing"), []);
 
-  return page === "landing" ? (
-    <OptisLanding enterApp={() => setPage("app")} />
-  ) : (
-    <OptisWorkspace exit={() => setPage("landing")} />
+  return (
+    <div className="experience-root">
+      <div
+        className={`app-shell-layer ${
+          page === "app" ? "is-visible" : page === "transitioning" ? "is-staged" : "is-preloaded"
+        }`}
+        aria-hidden={page !== "app"}
+        inert={page !== "app"}
+      >
+        <OptisRuntime exit={exitApp} active={page === "app"} />
+      </div>
+      {page !== "app" && <OptisLanding enterApp={enterApp} prepareApp={prepareApp} />}
+    </div>
   );
 }

@@ -1,24 +1,24 @@
 # Optis Frontend
 
-React 19 + TypeScript + Vite + Tailwind CSS v4 frontend for Optis.
+React 19, TypeScript, Vite, and Tailwind CSS frontend for the local Optis demo.
 
-## Local development
+## Run with the backend
+
+From the repository root, start the backend as described in the [main README](../README.md). In another terminal:
 
 ```sh
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
+pnpm exec tsc --noEmit
 pnpm dev
 ```
 
-(Or `npm install && npm run dev`.)
+Vite proxies `/v1/*` to `http://127.0.0.1:8000`. Open the Vite URL, select **Explore OPTIS**, and enter the backend's `OPTIS_TOKEN`. The token stays in React memory and is cleared when leaving or refreshing. The workspace fetches health and status, runs authenticated intents, and can show camera preview and record a voice question when those services are configured. Route lookup needs a configured local Valhalla instance and a fresh usable phone or browser location fix.
 
-## Connect to the Optis backend
+For a build served by the backend, run `pnpm build`, set `OPTIS_FRONTEND=frontend/dist` when starting Optis, and open the backend root URL. The existing `/camera` page remains available for bench checks and replay. On iPhone Safari, use HTTPS for browser location; the tab must remain in the foreground. See the [iPhone sender](../clients/location-ios/README.md) for a separate GPS source.
 
-Build with `pnpm build`. Start Optis with `OPTIS_FRONTEND=frontend/dist` and open the backend’s root URL. The **Explore Optis** button opens the app for voice questions, automatic item recall, and walking routes. Enter the backend’s `OPTIS_TOKEN` when prompted. See the [iPhone setup](../clients/location-ios/README.md) to supply live GPS fixes.
+The backend reports `arm: disabled`; the workspace does not provide arm approval or physical motion controls. Camera readiness and route availability are shown from live backend responses, not inferred from a healthy server.
 
-The backend’s `/camera` page is for bench checks and route replay.
+## Checks
 
-
-## Live GPS in Safari
-
-Open the product app over HTTPS on the iPhone, connect with the Optis access token, and tap **Use my location** under **Walk somewhere**. Allow precise location when prompted. Wait for **GPS ready**, then choose a destination. Turn on **Speak route cues** if you want audible turns. Location sharing pauses when the tab is hidden. Keep the tab in the foreground while walking. The Mac’s localhost address is for local testing.
+Run `pnpm exec tsc --noEmit` and `pnpm build` in this directory, plus `uv run python -m unittest discover -s tests -v` at the repository root. Browser checks should include the landing transition, reduced motion, small screens, token errors, camera unavailable state, microphone permission denial, and GPS permission denial.

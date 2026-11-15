@@ -5,7 +5,11 @@ export function useBrowserLocation(token: string) {
   const [locationMessage, setLocationMessage] = useState("");
   const stopWatch = useRef<(() => void) | null>(null);
 
-  useEffect(() => () => stopWatch.current?.(), [token]);
+  useEffect(() => {
+    setSharing(false);
+    setLocationMessage("");
+    return () => stopWatch.current?.();
+  }, [token]);
 
   function stop(message = "Location sharing stopped.") {
     stopWatch.current?.();
