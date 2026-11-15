@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 from threading import Event, Thread
+from time import monotonic
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -77,6 +78,19 @@ class WalkingRoutes(unittest.TestCase):
             self.assertEqual(client.get("/v1/status", headers=headers).status_code, 401)
             self.assertEqual(client.post("/v1/location", json=fix, headers=headers).status_code, 200)
             self.assertTrue(client.get("/v1/status", headers={"Authorization": "Bearer web"}).json()["location"]["usable"])
+
+    def test_product_token_can_send_browser_fixes_with_a_scoped_phone_token(self):
+        with TestClient(create_app(database=Path(self.temp.name) / "browser.sqlite3", token="web",
+                                   location_token="phone", router=self.router)) as client:
+            headers = {"Authorization": "Bearer web"}
+            fix = dict(seq=1700000000000, lat_deg=START[0], lon_deg=START[1],
+                       horizontal_accuracy_m=5, fix_time_utc=datetime.now(UTC).isoformat(), age_at_send_ms=0)
+            self.assertEqual(client.post("/v1/location", json=fix, headers=headers).status_code, 200)
+            now = monotonic()
+            with patch("optis.api.monotonic", return_value=now + 3):
+                self.assertTrue(client.get("/v1/status", headers=headers).json()["location"]["usable"])
+            with patch("optis.api.monotonic", return_value=now + 6):
+                self.assertFalse(client.get("/v1/status", headers=headers).json()["location"]["usable"])
 
     def test_new_destination_requires_fresh_gps_and_waits_on_dropout(self):
         results = self.intent("find_destination", query="public library").json()

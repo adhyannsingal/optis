@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { useBrowserLocation } from "./useBrowserLocation";
 
 type Destination = { name: string; lat: number; lon: number };
 type Reply = { status: string; text: string; speech?: string; data?: unknown; transcript?: string;
@@ -33,6 +34,7 @@ function intent(token: string, kind: string, fields: Record<string, unknown> = {
 export default function OptisWorkspace({ exit }: { exit: () => void }) {
   const [typedToken, setTypedToken] = useState("");
   const [token, setToken] = useState("");
+  const browserLocation = useBrowserLocation(token);
   const [health, setHealth] = useState<Health>();
   const [status, setStatus] = useState<Status>();
   const [query, setQuery] = useState("");
@@ -212,8 +214,8 @@ export default function OptisWorkspace({ exit }: { exit: () => void }) {
   }
 
   const gps = status?.location;
-  const gpsText = !gps ? "Waiting for iPhone GPS" : gps.age_seconds > 5 ? "iPhone GPS signal lost"
-    : gps.usable ? "iPhone GPS ready" : "iPhone GPS accuracy too low";
+  const gpsText = !gps ? "Waiting for GPS" : gps.age_seconds > 5 ? "GPS signal lost"
+    : gps.usable ? "GPS ready" : "GPS accuracy too low";
   const canRecord = Boolean(health?.voice_configured && typeof navigator.mediaDevices?.getUserMedia === "function" && typeof window.MediaRecorder === "function");
   const voiceLabel = { idle: "Ask Optis", starting: "Opening microphone…",
     recording: "Stop and ask", sending: "Transcribing…" }[voiceState];
@@ -247,6 +249,12 @@ export default function OptisWorkspace({ exit }: { exit: () => void }) {
             <h2 id="walk-heading">Walk somewhere</h2>
             <p><span role="status">{gpsText}</span>{gps && gps.age_seconds <= 5 &&
               ` · ±${gps.horizontal_accuracy_m.toFixed(0)} m`}</p>
+            <div className="optis-actions">
+              <button onClick={browserLocation.sharing ? () => browserLocation.stop() : browserLocation.start}>
+                {browserLocation.sharing ? "Stop sharing location" : "Use my location"}
+              </button>
+            </div>
+            {browserLocation.locationMessage && <p role="status">{browserLocation.locationMessage}</p>}
             {health?.pedestrian_routing_configured && (
               <form onSubmit={event => { event.preventDefault(); void submit("find_destination", { query: query.trim() }); }}>
                 <label>Destination

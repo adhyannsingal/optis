@@ -27,8 +27,7 @@ def fix_age(packet, now):
     return max(wall_age, sent_age, 0)
 
 
-def usable_origin(packet, now):
-    age = fix_age(packet, now)
+def usable_origin(packet, age):
     limits = Thresholds()
     return age is not None and age <= limits.max_age and packet.horizontal_accuracy_m <= limits.max_accuracy
 

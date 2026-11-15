@@ -118,9 +118,10 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
 
     app = FastAPI(title="Optis", lifespan=lifespan)
 
-    def authorize(authorization, *, expected=token):
-        if not expected or not authorization or not hmac.compare_digest(
-            authorization.encode(), f"Bearer {expected}".encode()
+    def authorize(authorization, *, expected=token, alternate=None):
+        if not authorization or not any(
+            hmac.compare_digest(authorization.encode(), f"Bearer {value}".encode())
+            for value in (expected, alternate) if value
         ):
             raise HTTPException(401, "A valid local Optis token is required.")
 
@@ -151,6 +152,12 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 "pedestrian_routing_configured": router is not None,
                 "voice_configured": active_voice() is not None, "arm": "disabled"}
 
+    def current_fix():
+        if not last_fix:
+            return None, None
+        packet, received, age_at_receipt = last_fix
+        return packet, age_at_receipt + monotonic() - received
+
     @app.get("/v1/status")
     def status(authorization: str | None = Header(default=None)):
         authorize(authorization)
@@ -161,27 +168,25 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 if current["status"] == "weak_signal":
                     route_status = current
             location_status = None
-            if last_fix:
-                packet, received = last_fix
-                age = max(0, (datetime.now(UTC) - packet.fix_time_utc).total_seconds())
+            packet, age = current_fix()
+            if packet:
                 location_status = {
                     "seq": packet.seq, "horizontal_accuracy_m": packet.horizontal_accuracy_m,
-                    "age_seconds": round(max(age, monotonic() - received), 1),
-                    "usable": usable_origin(packet, datetime.now(UTC)),
+                    "age_seconds": round(age, 1),
+                    "usable": usable_origin(packet, age),
                 }
             return {"route": route_status, "location": location_status, "arm": "disabled"}
 
     @app.post("/v1/location")
     def location(packet: PhoneFix, authorization: str | None = Header(default=None)):
         nonlocal last_fix
-        authorize(authorization, expected=location_token or token)
+        authorize(authorization, alternate=location_token)
         if packet.fix_time_utc.utcoffset() is None:
             raise HTTPException(422, "Fix timestamp must include a UTC offset.")
         with lock:
-            if fix_age(packet, datetime.now(UTC)) is not None and (
-                last_fix is None or packet.fix_time_utc > last_fix[0].fix_time_utc
-            ):
-                last_fix = packet, monotonic()
+            age = fix_age(packet, datetime.now(UTC))
+            if age is not None and (last_fix is None or packet.fix_time_utc > last_fix[0].fix_time_utc):
+                last_fix = packet, monotonic(), age
             if router and (not navigation or not navigation.active or not navigation.live):
                 return {"status": "fix_received", "text": "Phone fix received. Choose a walking destination."}
             if not live_source and not checked_route:
@@ -199,9 +204,10 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             raise HTTPException(422, "Choose a walking destination.")
         selected = Destination(**request.destination.model_dump())
         with lock:
-            if not last_fix or not usable_origin(last_fix[0], datetime.now(UTC)):
-                raise HTTPException(409, "Waiting for a fresh, accurate phone GPS fix.")
-            origin = last_fix[0].lat_deg, last_fix[0].lon_deg
+            packet, age = current_fix()
+            if not packet or not usable_origin(packet, age):
+                raise HTTPException(409, "Waiting for a fresh, accurate GPS fix.")
+            origin = packet.lat_deg, packet.lon_deg
             route_generation += 1
             generation = route_generation
         try:
@@ -218,8 +224,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         with lock:
             if generation != route_generation:
                 raise HTTPException(409, "That route request was superseded.")
-            packet = last_fix[0]
-            if not usable_origin(packet, datetime.now(UTC)) or math.hypot(
+            packet, age = current_fix()
+            if not usable_origin(packet, age) or math.hypot(
                 *route.project(packet.lat_deg, packet.lon_deg)
             ) > NavigationThresholds.corridor:
                 raise HTTPException(409, "Stay near the start of the mapped path and try again with a fresh GPS fix.")
@@ -240,9 +246,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             if not request.query or not request.query.strip():
                 raise HTTPException(422, "Enter a place name, address, or coordinates.")
             with lock:
-                origin = (last_fix[0].lat_deg, last_fix[0].lon_deg) if (
-                    last_fix and usable_origin(last_fix[0], datetime.now(UTC))
-                ) else None
+                packet, age = current_fix()
+                origin = (packet.lat_deg, packet.lon_deg) if packet and usable_origin(packet, age) else None
             try:
                 matches = router.search(request.query.strip(), origin)
             except RoutingUnavailable as error:
@@ -252,8 +257,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             if not matches:
                 return dict(request_id=request.request_id, status="destination_not_found",
                             text="No match in the local map. Try a fuller name, address, or coordinates.", data=[])
-            text = f"Found {matches[0].name}. Select it when iPhone GPS is ready." if len(matches) == 1 else (
-                f"Found {len(matches)} matches. Select your destination when iPhone GPS is ready.")
+            text = f"Found {matches[0].name}. Select it when GPS is ready." if len(matches) == 1 else (
+                f"Found {len(matches)} matches. Select your destination when GPS is ready.")
             return dict(request_id=request.request_id, status="destinations", text=text,
                         data=[dict(name=match.name, lat=match.lat, lon=match.lon) for match in matches])
         with lock:
