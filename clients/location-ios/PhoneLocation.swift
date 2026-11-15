@@ -1,7 +1,7 @@
 import CoreLocation
 import Foundation
 
-/// Add to an iOS app target and call start() from a foreground user action.
+/// Sends Core Location fixes during an active foreground session.
 @MainActor
 final class PhoneLocation: NSObject, @preconcurrency CLLocationManagerDelegate {
     private struct Fix: Encodable {
@@ -93,11 +93,15 @@ final class PhoneLocation: NSObject, @preconcurrency CLLocationManagerDelegate {
                 if (200..<300).contains(status),
                    let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     report(reply["text"] as? String ?? "Location sent.")
+                } else if status == 401 {
+                    report("The Optis location token was rejected.")
+                } else if status == 409 {
+                    report("Start a checked route in the Optis dashboard.")
                 } else {
                     report("Location receiver returned HTTP \(status).")
                 }
             } catch {
-                if active && !Task.isCancelled { report("Location receiver unavailable.") }
+                if active && !Task.isCancelled { report("Can’t reach Optis. Check the URL, Wi-Fi, and Local Network permission.") }
             }
         }
     }

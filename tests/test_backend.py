@@ -72,6 +72,7 @@ class BackendChecks(unittest.TestCase):
             self.intent(client, "remember", item="keys", place="desk")
             camera.matches = [{"label": "keyring", "position": "left", "stable": True}]
             camera.record("keys", monotonic() * 1000)
+            camera.record("bottle", monotonic() * 1000)
             self.assertEqual(self.intent(client, "find", item="keys")["status"], "live_observation")
             camera.matches *= 2
             self.assertEqual(self.intent(client, "find", item="keys")["status"], "ambiguous")
@@ -81,6 +82,9 @@ class BackendChecks(unittest.TestCase):
             self.assertNotIn("left", result["text"])
         with TestClient(create_app(database=self.database, token="local-test")) as client:
             self.assertEqual(self.intent(client, "find", item="keys")["data"]["camera"], "test camera")
+            bottle = self.intent(client, "find", item="bottle")
+            self.assertEqual(bottle["status"], "last_seen")
+            self.assertIn("a bottle", bottle["text"])
             self.intent(client, "forget", item="keys")
             self.assertEqual(self.intent(client, "find", item="keys")["status"], "unavailable")
 

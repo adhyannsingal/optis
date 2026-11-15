@@ -1,11 +1,12 @@
-# iPhone location sender
+# Optis Location for iPhone
 
-Create a SwiftUI iOS app target in Xcode, replace its generated app and view with the two Swift files here, and select your signing team. Set these target Info entries:
+Open `OptisLocation.xcodeproj` in Xcode. Connect and unlock your iPhone, choose it as the run destination, then select your Apple development team in **Signing & Capabilities** and click **Run**. If Xcode reports a bundle identifier conflict, use an identifier unique to your team. Enable Developer Mode on the phone if prompted.
 
-- `NSLocationWhenInUseUsageDescription` — Optis uses your position to test a checked outdoor route.
-- `NSLocalNetworkUsageDescription` — Optis sends live location fixes to your local Optis backend.
-- `NSAppTransportSecurity` → `NSAllowsLocalNetworking` — Yes for the private LAN development setup. Prefer HTTPS when sending location outside that setup.
+Run the Optis backend on a trusted local network with Valhalla configured. Choose the Mac’s Wi-Fi IPv4 address under **System Settings → Wi-Fi → Details → TCP/IP**. Launch Uvicorn with `--host MAC_IP --port 8010` using that address. Generate separate random values for `OPTIS_TOKEN` (dashboard) and `OPTIS_LOCATION_TOKEN` (phone). The iPhone token can post GPS fixes only. Use HTTPS for deployment outside the trusted development network.
 
-Run the backend on the Mac or Jetson with `--host 0.0.0.0` on a private test network. On the phone, use the host's reachable local URL ending in `/v1/location`, enter the backend's `OPTIS_TOKEN`, and tap Start. Allow Local Network access and Precise Location while using the app. Keep the app in the foreground. With Valhalla configured, start sending fixes and select a walking destination in the dashboard. For the saved-route-only setup, start the checked route through `POST /v1/intent` before sending fixes.
+1. Connect the iPhone to the same network. Open **Optis Location**, enter `http://MAC_IP:8010` and the location token, then tap **Start sending location**.
+2. Allow **Local Network** and **While Using the App**, with **Precise Location** on. Keep Optis Location open. It stops sending in the background.
+3. In the Optis web app, check that it says **iPhone GPS ready** and shows acceptable accuracy. Search for and select a destination.
+4. With a sighted spotter, try a short route and stop the phone sender. The web app should show the lost signal and route guidance should pause. If the iPhone app restarts during a route, select the destination again to replan from a fresh fix.
 
-Restart or replan the active route if the app restarts and begins its fix sequence at zero. After a disconnect, verify route status goes to weak signal before using the next cue. First field test uses one short verified outdoor segment with a sighted spotter.
+The app sends latitude, longitude, accuracy, and fix timing to the backend. Optis keeps the latest fix in memory for route planning and guidance.

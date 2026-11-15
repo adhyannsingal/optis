@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from starlette.concurrency import run_in_threadpool
 
@@ -64,7 +65,7 @@ def item_result(camera, item=None):
     return "live_observation", text + ".", objects
 
 
-def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None):
+def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None, location_token=None, frontend=None):
     lock = Lock()
     navigation = None
     live_source = None
@@ -117,9 +118,9 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
 
     app = FastAPI(title="Optis", lifespan=lifespan)
 
-    def authorize(authorization):
-        if not token or not authorization or not hmac.compare_digest(
-            authorization.encode(), f"Bearer {token}".encode()
+    def authorize(authorization, *, expected=token):
+        if not expected or not authorization or not hmac.compare_digest(
+            authorization.encode(), f"Bearer {expected}".encode()
         ):
             raise HTTPException(401, "A valid local Optis token is required.")
 
@@ -160,13 +161,14 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 location_status = {
                     "seq": packet.seq, "horizontal_accuracy_m": packet.horizontal_accuracy_m,
                     "age_seconds": round(max(age, monotonic() - received), 1),
+                    "usable": usable_origin(packet, datetime.now(UTC)),
                 }
             return {"route": route_status, "location": location_status, "arm": "disabled"}
 
     @app.post("/v1/location")
     def location(packet: PhoneFix, authorization: str | None = Header(default=None)):
         nonlocal last_fix
-        authorize(authorization)
+        authorize(authorization, expected=location_token or token)
         if packet.fix_time_utc.utcoffset() is None:
             raise HTTPException(422, "Fix timestamp must include a UTC offset.")
         with lock:
@@ -244,8 +246,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             if not matches:
                 return dict(request_id=request.request_id, status="destination_not_found",
                             text="No match in the local map. Try a fuller name, address, or coordinates.", data=[])
-            text = f"Found {matches[0].name}. Choose it in the dashboard to start." if len(matches) == 1 else (
-                f"Found {len(matches)} matches. Choose your destination in the dashboard.")
+            text = f"Found {matches[0].name}. Select it when iPhone GPS is ready." if len(matches) == 1 else (
+                f"Found {len(matches)} matches. Select your destination when iPhone GPS is ready.")
             return dict(request_id=request.request_id, status="destinations", text=text,
                         data=[dict(name=match.name, lat=match.lat, lon=match.lon) for match in matches])
         with lock:
@@ -273,7 +275,7 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                     placement = store.recall(item)
                     if sighting:
                         seen = datetime.fromisoformat(sighting["seen_at"]).astimezone()
-                        label = {"keys": "a keyring", "phone": "a phone"}[item]
+                        label = {"keys": "a keyring", "phone": "a phone", "bottle": "a bottle"}[item]
                         when = seen.strftime("%I:%M:%S %p").lstrip("0")
                         if seen.date() != datetime.now().astimezone().date():
                             when = f"{seen.strftime('%b %d, %Y')} at {when}"
@@ -350,6 +352,9 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             result["voice_error"] = str(error)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
+    if frontend:
+        app.mount("/", StaticFiles(directory=frontend, html=True), name="frontend")
+
     return app
 
 
@@ -375,5 +380,6 @@ def from_environment():
     key = os.getenv("XAI_API_KEY")
     key_file = os.getenv("OPTIS_XAI_KEY_FILE")
     router = Valhalla(url, os.getenv("OPTIS_PLACES_INDEX")) if (url := os.getenv("OPTIS_VALHALLA_URL")) else None
-    return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router, camera=camera,
+    return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router,
+                      location_token=os.getenv("OPTIS_LOCATION_TOKEN"), frontend=os.getenv("OPTIS_FRONTEND"), camera=camera,
                       voice=XaiVoice(key) if key else None, voice_key_file=Path(key_file) if key_file else None)

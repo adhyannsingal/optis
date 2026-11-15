@@ -1,3 +1,4 @@
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
@@ -42,7 +43,7 @@ class WalkingRoutes(unittest.TestCase):
         self.dest = Destination("Example public library", *END)
         self.router = MagicMock(spec=Valhalla)
         index = Path(self.temp.name) / "places.sqlite3"
-        with sqlite3.connect(index) as connection:
+        with closing(sqlite3.connect(index)) as connection, connection:
             connection.execute("CREATE VIRTUAL TABLE places USING fts5(name, lat UNINDEXED, lon UNINDEXED)")
             connection.execute("INSERT INTO places VALUES (?, ?, ?)", (self.dest.name, self.dest.lat, self.dest.lon))
         self.router.search.side_effect = Valhalla("http://localhost:8002", index).search
@@ -65,6 +66,17 @@ class WalkingRoutes(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
+
+    def test_phone_token_is_limited_to_sending_fixes(self):
+        with TestClient(create_app(database=Path(self.temp.name) / "scoped.sqlite3", token="web",
+                                   location_token="phone", router=self.router)) as client:
+            headers = {"Authorization": "Bearer phone"}
+            now = datetime.now(UTC).isoformat()
+            fix = dict(seq=1, lat_deg=42.0, lon_deg=-72.0, horizontal_accuracy_m=5,
+                       fix_time_utc=now, age_at_send_ms=0)
+            self.assertEqual(client.get("/v1/status", headers=headers).status_code, 401)
+            self.assertEqual(client.post("/v1/location", json=fix, headers=headers).status_code, 200)
+            self.assertTrue(client.get("/v1/status", headers={"Authorization": "Bearer web"}).json()["location"]["usable"])
 
     def test_new_destination_requires_fresh_gps_and_waits_on_dropout(self):
         results = self.intent("find_destination", query="public library").json()

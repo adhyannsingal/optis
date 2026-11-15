@@ -95,9 +95,10 @@ class HeadCamera:
                                 position=item["position"], pickup_zone=None,
                                 stable=tracker.tracks[item["track_id"]]["count"] >= 2,
                             ))
-                        phones = [box for box in boxes if box["label"] == "cell phone"]
-                        if len(phones) == 1 and phones[0]["stable"]:
-                            self.record("phone", seen_ms)
+                        for label, category in (("cell phone", "phone"), ("bottle", "bottle")):
+                            matches = [box for box in boxes if box["label"] == label]
+                            if len(matches) == 1 and matches[0]["stable"]:
+                                self.record(category, seen_ms)
                         self.publish("ready", dict(
                             v=1, mode="live", source="head", frame_id=frame_id,
                             seen_ms=seen_ms, size_px=[width, height], detections=boxes,
