@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  color: #211e1c;
-  background: #f8f8f7;
+  color: #F5F5F7;
+  background: #0A0A0B;
   font-family:
     Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --hero-background: #f8f8f7;
-  --text-primary: #211e1c;
-  --text-secondary: #5f5955;
-  --border-primary: #aaa5a1;
+  --hero-background: #0A0A0B;
+  --text-primary: #F5F5F7;
+  --text-secondary: #A1A1A6;
+  --border-primary: #77777D;
+  --app-background: #650B17;
 }
 
 @layer base {
@@ -59,7 +60,7 @@
   transform: translateY(-180%);
   border: 1px solid var(--border-primary);
   border-radius: 10px;
-  background: white;
+  background: #1C1C1E;
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
@@ -134,8 +135,8 @@
 }
 
 .optis-app-shell button:hover {
-  border-color: #7d7874;
-  background: rgb(255 255 255 / 70%);
+  border-color: #B5B5BA;
+  background: rgb(255 255 255 / 8%);
 }
 
 .optis-app-shell button:active {
@@ -177,7 +178,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--hero-background);
+  /* Broad, restrained studio illumination reveals the original black hardware. */
+  background: radial-gradient(ellipse 67% 43% at 50% 48%, #424247 0%, #262629 46%, #0A0A0B 100%);
   color: var(--text-primary);
   contain: layout paint;
 }
@@ -191,7 +193,7 @@
 .stage-word {
   position: absolute;
   z-index: -1;
-  top: 16.5%;
+  top: 17%;
   right: 0;
   left: 0;
   display: flex;
@@ -199,11 +201,11 @@
   align-items: center;
   justify-content: space-between;
   color: var(--text-primary);
-  font-size: clamp(124px, 24.4vw, 350px);
+  font-size: clamp(116px, 22.5vw, 330px);
   font-weight: 650;
   letter-spacing: -0.065em;
   line-height: 0.8;
-  opacity: 0.055;
+  opacity: 0.075;
   white-space: nowrap;
 }
 
@@ -219,7 +221,7 @@
   position: relative;
   z-index: 2;
   display: flex;
-  width: min(67vw, 970px);
+  width: min(82vw, 1250px);
   height: 380px;
   align-items: center;
   justify-content: center;
@@ -236,7 +238,8 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  animation: spec-float 5s ease-in-out infinite;
+  /* Stable product presentation; no idle rotation or jumping when the dive starts. */
+  animation: none;
 }
 
 .spectacles-float img {
@@ -245,7 +248,7 @@
   height: auto;
   object-fit: contain;
   background: transparent;
-  filter: drop-shadow(0 22px 18px rgb(30 28 27 / 18%));
+  filter: none;
   user-select: none;
 }
 
@@ -262,7 +265,7 @@
 }
 
 .landing.is-zooming .motion-stage .spectacles {
-  animation: camera-lens-zoom var(--camera-zoom-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
+  animation: camera-lens-zoom var(--camera-zoom-duration) cubic-bezier(0.55, 0.04, 0.2, 1) both;
   will-change: transform;
 }
 
@@ -341,7 +344,7 @@
 }
 
 .camera-zoom-transition.is-active .camera-dark-fill {
-  animation: camera-aperture-fill var(--camera-zoom-duration) cubic-bezier(0.32, 0, 0.1, 1) both;
+  animation: camera-aperture-fill var(--camera-zoom-duration) cubic-bezier(0.55, 0.04, 0.2, 1) both;
   will-change: transform, opacity;
 }
 
@@ -357,17 +360,17 @@
 
 @keyframes camera-aperture-fill {
   0%,
-  42% {
+  34% {
     opacity: 0;
-    transform: scale(0.3);
+    transform: scale(0.65);
   }
-  60% {
-    opacity: 0.22;
-    transform: scale(1);
+  48% {
+    opacity: 0.86;
+    transform: scale(1.05);
   }
-  80% {
-    opacity: 0.97;
-    transform: scale(calc(var(--camera-fill-scale) * 0.44));
+  74% {
+    opacity: 1;
+    transform: scale(calc(var(--camera-fill-scale) * 0.48));
   }
   100% {
     opacity: 1;
@@ -384,8 +387,8 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #08090b;
-  color: #f4f4f2;
+  background: var(--app-background);
+  color: #FFF1F1;
 }
 
 .app-shell-brand {
@@ -434,8 +437,8 @@
 }
 
 .optis-app-shell button:hover {
-  border-color: rgb(244 244 242 / 38%);
-  background: rgb(255 255 255 / 8%);
+  border-color: rgb(244 244 242 / 65%);
+  background: rgb(255 255 255 / 10%);
 }
 
 .optis-app-shell button:focus-visible {
