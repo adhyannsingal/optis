@@ -16,5 +16,5 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-optis = ["camera.html"]
+optis = ["camera.html", "cup_demo.js"]
 "optis.navigation" = ["fixtures/*.json"]

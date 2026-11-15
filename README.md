@@ -51,3 +51,12 @@ The local demo shows a north-up schematic route line, current accepted phone pos
 Use a sighted spotter for a supervised outdoor walking test. GPS dropouts, off-route fixes, and uncertain arrivals pause progress or leave the instruction visible; Optis does not make obstacle or crossing clearance claims. A route is only a mapped pedestrian path, not proof that any segment is safe to traverse. An outdoor walk is required before claiming cue timing or reliable guidance.
 
 Both destination lookup and route calculation run locally after setup. Results depend on the coverage and contents of the installed map. The place index searches mapped names and numbered addresses. Coordinates can be used for any destination in routing coverage.
+
+## Simulated cup pickup
+
+Run `uv run python -m optis.cup_demo --web` with distinct `OPTIS_TOKEN` and
+`OPTIS_SPOTTER_TOKEN` values to use the existing `/camera` bench for a typed
+`cup_to_tray` request and separate local spotter approval. All arm commands, table
+observations and poses are simulated; physical execution remains disabled.
+See [the simulation handoff](docs/OPTIS_Cup_Simulation_Handoff.md) for full launch,
+terminal demo, tests, failure cases and the outstanding operator measurements.

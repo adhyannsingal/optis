@@ -25,6 +25,7 @@ from .navigation.location import PhoneFix, PhoneRoute, fix_age, usable_origin
 from .navigation.navigation import Navigation, Thresholds as NavigationThresholds
 from .navigation.routes import DEFAULT_ROUTE, FixtureRouteProvider, RouteError
 from .navigation.valhalla import Destination, RoutingUnavailable, Valhalla
+from .cup_bridge import CupDemo, cup_router
 
 
 class WalkDestination(BaseModel):
@@ -38,7 +39,7 @@ class Intent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1, max_length=128)
     kind: Literal["scene", "find", "remember", "forget", "start_route", "next", "pause", "resume", "stop", "retrieve", "find_destination", "walk_to", "navigate_to", "choose_destination", "recalculate"]
-    item: Literal["keys", "phone", "bottle"] | None = None
+    item: Literal["keys", "phone", "bottle", "cup"] | None = None
     place: str | None = Field(default=None, min_length=1, max_length=300)
     route_id: str | None = None
     query: str | None = Field(default=None, min_length=1, max_length=200)
@@ -52,7 +53,7 @@ def item_result(camera, item=None):
         return "unavailable", "Camera view unavailable.", None
     candidates = observation["detections"]
     if item:
-        labels = {"keys": "keyring", "phone": "cell phone", "bottle": "bottle"}
+        labels = {"keys": "keyring", "phone": "cell phone", "bottle": "bottle", "cup": "cup"}
         candidates = camera.keyring_snapshot() if item == "keys" else [
             detection for detection in candidates if detection["label"] == labels[item]
         ]
@@ -66,7 +67,10 @@ def item_result(camera, item=None):
     return "live_observation", text + ".", objects
 
 
-def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None, location_token=None, frontend=None):
+def create_app(*, database=None, token=None, checked_route=None, camera=None, voice=None, voice_key_file=None, router=None, location_token=None, frontend=None,
+               cup_demo=None, spotter_token=None):
+    if cup_demo and (not spotter_token or spotter_token in {token, location_token}):
+        raise ValueError("Simulation requires a separate OPTIS_SPOTTER_TOKEN")
     lock = Lock()
     navigation = None
     live_source = None
@@ -133,9 +137,13 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         recording = True
         if camera:
             camera.start(record)
+        if cup_demo:
+            cup_demo.start()
         try:
             yield
         finally:
+            if cup_demo:
+                cup_demo.close()
             with lock:
                 recording = False
             if camera:
@@ -150,6 +158,14 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             for value in (expected, alternate) if value
         ):
             raise HTTPException(401, "A valid local Optis token is required.")
+
+    if cup_demo:
+        app.include_router(cup_router(cup_demo, authorize, spotter_token,
+                                     lambda fields, auth: intent(Intent(**fields), auth)))
+
+    @app.get("/v1/cup-demo/ui.js", include_in_schema=False)
+    def cup_script():
+        return FileResponse(Path(__file__).with_name("cup_demo.js"), media_type="text/javascript")
 
     @app.get("/camera", include_in_schema=False)
     def camera_page():
@@ -176,7 +192,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 "live_route_configured": checked_route is not None,
                 "live_route_id": checked_route.route_id if checked_route else None,
                 "pedestrian_routing_configured": router is not None,
-                "voice_configured": active_voice() is not None, "arm": "disabled"}
+                "voice_configured": active_voice() is not None, "arm": "disabled",
+                "cup_simulation": cup_demo is not None}
 
     def current_fix():
         if not last_fix:
@@ -203,7 +220,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                     "usable": ready, "ready": ready,
                 }
             return {"route": route_status, "route_map": route_map(), "location": location_status,
-                    "audio": speech.status(), "arm": "disabled"}
+                    "audio": speech.status(), "arm": "disabled",
+                    "cup_simulation": cup_demo.coordinator.status() if cup_demo else None}
 
     @app.get("/v1/navigation/audio")
     def navigation_audio(authorization: str | None = Header(default=None)):
@@ -279,6 +297,11 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
     def intent(request: Intent, authorization: str | None = Header(default=None)):
         nonlocal navigation, live_source, route_generation, pending_destinations
         authorize(authorization)
+        if cup_demo and request.kind == "retrieve" and request.item in {None, "cup"}:
+            return cup_demo.result(cup_demo.coordinator.submit(
+                "retrieve", request.item, request_id=request.request_id), request.request_id)
+        if cup_demo and request.kind == "stop":
+            cup_demo.coordinator.stop()
         if request.kind in {"find_destination", "walk_to", "navigate_to", "choose_destination", "recalculate"}:
             if not router:
                 raise HTTPException(503, "Valhalla pedestrian routing is not configured.")
@@ -359,7 +382,7 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                     placement = store.recall(item)
                     if sighting:
                         seen = datetime.fromisoformat(sighting["seen_at"]).astimezone()
-                        label = {"keys": "a keyring", "phone": "a phone", "bottle": "a bottle"}[item]
+                        label = {"keys": "a keyring", "phone": "a phone", "bottle": "a bottle", "cup": "a cup"}[item]
                         when = seen.strftime("%I:%M:%S %p").lstrip("0")
                         if seen.date() != datetime.now().astimezone().date():
                             when = f"{seen.strftime('%b %d, %Y')} at {when}"
@@ -482,6 +505,11 @@ def from_environment():
     key = os.getenv("XAI_API_KEY")
     key_file = os.getenv("OPTIS_XAI_KEY_FILE")
     router = Valhalla(url, os.getenv("OPTIS_PLACES_INDEX")) if (url := os.getenv("OPTIS_VALHALLA_URL")) else None
+    arm_mode = os.getenv("OPTIS_ARM_MODE", "disabled")
+    if arm_mode not in {"disabled", "mock"}:
+        raise RuntimeError("Real arm execution is disabled. Use OPTIS_ARM_MODE=mock for simulation.")
     return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router,
                       location_token=os.getenv("OPTIS_LOCATION_TOKEN"), frontend=os.getenv("OPTIS_FRONTEND"), camera=camera,
-                      voice=XaiVoice(key) if key else None, voice_key_file=Path(key_file) if key_file else None)
+                      voice=XaiVoice(key) if key else None, voice_key_file=Path(key_file) if key_file else None,
+                      cup_demo=CupDemo() if arm_mode == "mock" else None,
+                      spotter_token=os.getenv("OPTIS_SPOTTER_TOKEN"))

@@ -50,3 +50,11 @@ The plan names a Jetson Orin Nano and a Waveshare arm, but exact carrier, arm mo
 
 ## Working with the ChatGPT conversation
 Cursor does **not** automatically receive the full ChatGPT conversation. This file captures relevant shared decisions only. For changes decided in ChatGPT later, update this file through reviewed commits so future Cursor sessions have the current context.
+
+## Simulated cup pickup handoff
+
+`docs/OPTIS_Cup_Simulation_Handoff.md` documents the mock-only `cup_to_tray`
+coordinator, fake arm, synthetic table gate and `/camera` controls. Default arm
+execution remains disabled; only explicit mock mode exposes the demo. Approval is
+local and uses a distinct spotter token. No real SDK/serial transport or physical
+calibration was imported. The existing approach sample is still unqualified.

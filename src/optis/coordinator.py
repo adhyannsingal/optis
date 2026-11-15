@@ -112,6 +112,7 @@ class Coordinator:
             if self.selection != "cup" or self.clock() >= (self.selection_deadline or 0):
                 return self._reject("no_target")
             if error := self.gate.check(self.clock()*1000):
+                self.state, self.task_id, self.stage = "idle", None, None
                 self.code = error
                 return self._emit()
             if not self._healthy():
