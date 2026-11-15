@@ -2,7 +2,12 @@
 __pycache__/
 *.egg-info/
 .env
+.xai-key
+.xai-key.*
 *.sqlite3*
 config/*.local.json
 models/*.pt
+models/*.ts
 models/*.onnx
+
+.valhalla/

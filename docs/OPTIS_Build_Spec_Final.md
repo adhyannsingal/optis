@@ -1,6 +1,6 @@
-# PHAROS Build Spec Final
+# Optis Build Spec Final
 
-Build in this order: clean backend → Grok Voice → camera and range sensor → full sensor integration → Jetson and arm. Inventory Jetson storage and identify the arm in parallel so hardware availability does not delay the last stage. One runnable PHAROS application owns perception, navigation, speech arbitration and arm requests. Run it on a Mac during development and on the Jetson Orin Nano for final integration.
+Build in this order: clean backend → Grok Voice → camera and range sensor → full sensor integration → Jetson and arm. Inventory Jetson storage and identify the arm in parallel so hardware availability does not delay the last stage. One runnable Optis application owns perception, navigation, speech arbitration and arm requests. Run it on a Mac during development and on the Jetson Orin Nano for final integration.
 
 ## 1. Backend and code import
 
@@ -8,24 +8,24 @@ Build in this order: clean backend → Grok Voice → camera and range sensor �
 
 | Destination | Port from the local import kit | New work |
 | --- | --- | --- |
-| `src/pharos/perception/` | `app/vision/{model,tracking,http_camera,capture}.py`, model manifest and three vision tests from `perception-source`. Use `visionlab/capture.py` as a reference for latest-frame processing and recovery. | One Linux-compatible UVC adapter keyed by configured device identity, and one W11 adapter. Normalize to the existing observation contract. Convert normalized boxes to decoded-frame pixel coordinates explicitly. Keep the existing detector for scene and bottle cues. Evaluate a local YOLO-World worker for keyrings and phones on the same camera frames. |
-| `src/pharos/navigation/` | `visionlab/{navigation,routes}.py`, standard/noisy replay fixtures and route tests from `navigation-memory-source`. | Live location adapter, surveyed waypoints, projection into local metres, and route hold/resume when fixes go stale. Extract replay-independent logic and keep replay labeled. |
-| `src/pharos/interaction/` | `visionlab/{commands,store}.py` and memory tests. Use `service.py`, `search.py` and benchmark fixtures as references for intent routing, stability and false-positive reporting. | Support keys, phone and bottle. Keep explicit placements and automatic last-seen sightings in separate SQLite tables. Use the existing preview to show an optional local photo of the last sighting. |
-| `firmware/w11/`, `firmware/range/` | Camera preparation script plus its vendor notes. Range extraction starts from the sensor-only feedback implementation and controller tests. | Keep only the camera capture path and one USB range protocol. Update generator and reader together to use `X-PHAROS-Frame-Age-Us`. Drop hosted upload, haptics and earlier application layers. |
+| `src/optis/perception/` | `app/vision/{model,tracking,http_camera,capture}.py`, model manifest and three vision tests from `perception-source`. Use `visionlab/capture.py` as a reference for latest-frame processing and recovery. | One Linux-compatible UVC adapter keyed by configured device identity, and one W11 adapter. Normalize to the existing observation contract. Convert normalized boxes to decoded-frame pixel coordinates explicitly. Keep the existing detector for scene and bottle cues. Evaluate a local YOLO-World worker for keyrings and phones on the same camera frames. |
+| `src/optis/navigation/` | `visionlab/{navigation,routes}.py`, standard/noisy replay fixtures and route tests from `navigation-memory-source`. | Live location adapter, surveyed waypoints, projection into local metres, and route hold/resume when fixes go stale. Extract replay-independent logic and keep replay labeled. |
+| `src/optis/interaction/` | `visionlab/{commands,store}.py` and memory tests. Use `service.py`, `search.py` and benchmark fixtures as references for intent routing, stability and false-positive reporting. | Support keys, phone and bottle. Keep explicit placements and automatic last-seen sightings in separate SQLite tables. Use the existing preview to show an optional local photo of the last sighting. |
+| `firmware/w11/`, `firmware/range/` | Camera preparation script plus its vendor notes. Range extraction starts from the sensor-only feedback implementation and controller tests. | Keep only the camera capture path and one USB range protocol. Update generator and reader together to use `X-OPTIS-Frame-Age-Us`. Drop hosted upload, haptics and earlier application layers. |
 
-The import kit lives at `work/pharos-import-review/` beside the review output directory. It is a local review copy of exact source files with commit IDs and checksums in `PROVENANCE.local.txt`. Port in small changes, fix imports and fixture paths, and adapt tests that depend on the previous application entry point. Use PHAROS names for package paths, headers and settings. Keep upstream attribution where required. Confirm reuse and redistribution permissions before adding prior code, vendor examples or model assets to a submission. Keep credentials, private captures, real location traces and databases out of Git. Model weights are acquired separately, pinned by checksum, cached before the demo, and tested on the actual Linux ARM64 image. Verify the chosen ONNX runtime and CPU performance before adding acceleration.
+The import kit lives at `work/optis-import-review/` beside the review output directory. It is a local review copy of exact source files with commit IDs and checksums in `PROVENANCE.local.txt`. Port in small changes, fix imports and fixture paths, and adapt tests that depend on the previous application entry point. Use Optis names for package paths, headers and settings. Keep upstream attribution where required. Confirm reuse and redistribution permissions before adding prior code, vendor examples or model assets to a submission. Keep credentials, private captures, real location traces and databases out of Git. Model weights are acquired separately, pinned by checksum, cached before the demo, and tested on the actual Linux ARM64 image. Verify the chosen ONNX runtime and CPU performance before adding acceleration.
 
 Repo layout for implementation
 
 ```text
-src/pharos/{api,coordinator,contracts}.py
-src/pharos/{perception,navigation,interaction,arm}/
+src/optis/{api,coordinator,contracts}.py
+src/optis/{perception,navigation,interaction,arm}/
 firmware/{w11,range}/
 clients/location-ios/
 config/{demo,bench}.example.json
 tests/{fixtures,integration}/
 models/manifest.json
-docs/PHAROS_Build_Spec_Final.md
+docs/OPTIS_Build_Spec_Final.md
 ```
 
 ### Service contract
@@ -50,15 +50,21 @@ Use the existing `find` intent for `keys` and `phone`. Start with buttons in the
 2. **Previously seen (`last_seen`).** Say “I last saw a phone at 3:42 p.m. in the desk camera.” Add “on the desk” only if a fixed camera's verified desk zone contains the detection or the user confirmed the location. A wearable sighting gives a camera and time. Its old left/right direction has no meaning as a present location.
 3. **No sighting (`saved_placement` or `not_seen`).** If there is a saved placement, say “I don't see your keys right now. You last told me they were on the entryway table.” Otherwise, say the item has not been seen. Automatic sightings never overwrite a saved placement.
 
+**Mac prototype.** The dashboard uses local YOLOE with a prepared keyring prompt and YOLOv8 for phones. It stores last-seen camera and time in SQLite. Verify the actual objects before relying on this setup in the demo. The target above includes the optional photo and Jetson qualification.
+
 **Acceptance.** Use the actual keys and phone. Test left/center/right, a second keyring or phone, occlusion, an empty view, stale frames and camera disconnect. Remove an item and verify that its answer switches from live to last seen, with the correct timestamp and optional photo. Restart and verify both the sighting and the explicit saved placement survive. If a detector misses the target or confuses lookalikes, use the registered tag for personal identification and keep saved-location recall working. Check the chosen model on Jetson before enabling it in the standalone demo.
 
 ### Live GPS and clearance policy
 
 **GPS.** Use a foreground iPhone Core Location sender on the local link. Send `seq, lat_deg, lon_deg, horizontal_accuracy_m, fix_time_utc, age_at_send_ms`; the receiver adds monotonic receipt time. Keep precise location enabled for the test. Reject invalid or repeated fixes and hold on stale/inaccurate data, implausible jumps, missing coverage or ambiguous parallel paths. Record measured timing and accuracy outdoors. Start with a five-second freshness ceiling and tune the accuracy/corridor gates from the checked route. If transport delay cannot be bounded, hold. Project live fixes and checked waypoints into the same local metre frame. Require consecutive accepted fixes for a turn and arrival; never use quiet GPS as obstacle clearance. On a sighted, supervised outdoor route with one clear turn, require two correct runs and a disconnect that produces no further turn cues. Use labeled replay indoors if live fixes are poor. USB GNSS via `gpsd` is a later phone-free option. [Core Location](https://developer.apple.com/documentation/CoreLocation/getting-the-current-location-of-a-device) · [GPS accuracy](https://www.gps.gov/gps-accuracy) · [GPSD client](https://www.gpsd.io/client-howto.html)
 
+**Destination routing.** Use local Valhalla with the regional OpenStreetMap pedestrian graph and a local index of mapped names and addresses. Accept a place, address, or coordinates. Show matches and let the user select the destination. Plan from a recent accurate phone fix, then track the complete maneuver paths and keep the existing fix and dropout gates. After a detour, the user can request a new route from their current fix. Saved routes and labeled replay are available for demos. Independently check pedestrian access and crossings during supervised qualification. See the [README setup](../README.md#local-walking-routes-with-valhalla).
+
 **Obstacles.** The single ultrasonic sensor gives a forward proximity warning. A verified near reading triggers “Stop, obstacle ahead.” No echo, timeout or disconnection becomes unknown and holds navigation. Add a borrowed USB stereo depth camera for directional cues. Fix its height, angle and forward orientation for the demo. Project depth to three marked body-width paths, including the near swept area and floor coverage. Check minimum range and invalid-pixel behavior. A sector is clear only when the tested path is covered by current valid measurements and free of obstructions. Use several consecutive valid frames and measure latency. Offer “Left side open” or “Right side open” after Stop only when the corresponding path is verified; require explicit resume after a hold. Flat supervised lane only. Test left-only, right-only, both blocked, narrow obstacle, invalid depth and unplugging twice each. Any wrong-side cue disables direction for the demo. If only a compact multizone ToF board is available, use directions only if measured coverage passes the same tests. [Stereo depth setup](https://docs.luxonis.com/hardware/platform/depth/configuring-stereo-depth) · [Multizone ToF limitations](https://www.st.com/resource/en/datasheet/vl53l5cx.pdf)
 
 ## 2. Grok Voice
+
+**Mac demo adapter.** Push-to-talk records a short clip and uses xAI's speech-to-text and text-to-speech REST endpoints. The backend accepts scene and item queries and basic route controls from a fixed command list and voices the existing intent result. The WebSocket design below is the target for the complete voice integration.
 
 **Owner B.** Run the Grok adapter next to the local service. Use the xAI Realtime WebSocket with `grok-voice-latest` and a server-side `XAI_API_KEY`. Start with push-to-talk, mono 24 kHz PCM16, manual audio commit, and bounded playback. If a browser connects directly later, use ephemeral client credentials. Send user speech while push-to-talk is active. Keep frames and raw location out of the voice session by default. [xAI speech-to-speech](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech) · [Realtime reference](https://docs.x.ai/developers/rest-api-reference/inference/voice)
 

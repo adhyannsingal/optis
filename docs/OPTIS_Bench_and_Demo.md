@@ -1,4 +1,4 @@
-# PHAROS bench and demo runbook
+# Optis bench and demo runbook
 
 ## Hardware setup
 

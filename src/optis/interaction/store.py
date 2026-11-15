@@ -1,4 +1,4 @@
-"""Explicit user placements; visual observations never write to this store."""
+"""User-confirmed placements and automatic sightings are stored separately."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,7 +7,7 @@ import os
 
 
 def default_database():
-    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "pharos/placements.sqlite3"
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "optis/placements.sqlite3"
 
 
 class Store:
@@ -22,6 +22,10 @@ class Store:
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS placements "
             "(item TEXT PRIMARY KEY, location TEXT NOT NULL, confirmed_at TEXT NOT NULL)"
+        )
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS sightings "
+            "(item TEXT NOT NULL, camera TEXT NOT NULL, seen_at TEXT NOT NULL, PRIMARY KEY(item, camera))"
         )
         self.connection.commit()
 
@@ -44,6 +48,24 @@ class Store:
     def forget(self, item):
         with self.connection:
             return self.connection.execute("DELETE FROM placements WHERE item = ?", (item,)).rowcount > 0
+
+    def sight(self, item, camera, seen_at):
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO sightings VALUES (?, ?, ?) ON CONFLICT(item, camera) DO UPDATE SET "
+                "seen_at=excluded.seen_at WHERE excluded.seen_at > sightings.seen_at",
+                (item, camera, seen_at.isoformat()),
+            )
+
+    def last_seen(self, item):
+        row = self.connection.execute(
+            "SELECT * FROM sightings WHERE item = ? ORDER BY seen_at DESC LIMIT 1", (item,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def clear_sightings(self, item):
+        with self.connection:
+            return self.connection.execute("DELETE FROM sightings WHERE item = ?", (item,)).rowcount > 0
 
     def close(self):
         self.connection.close()

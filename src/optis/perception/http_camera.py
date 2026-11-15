@@ -42,7 +42,7 @@ class HttpCamera:
             with self.opener.open(request,timeout=.7) as response:
                 if response.headers.get_content_type()!='image/jpeg': return False, None
                 data = response.read(1_000_001)
-                age = response.headers.get('X-PHAROS-Frame-Age-Us')
+                age = response.headers.get('X-OPTIS-Frame-Age-Us')
             # Validate format/dimensions before expanding the image to an array.
             image = read_jpeg(data)
             if age is not None:

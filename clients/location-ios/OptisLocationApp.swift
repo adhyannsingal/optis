@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct PHAROSLocationApp: App {
+struct OptisLocationApp: App {
     var body: some Scene {
         WindowGroup { LocationView() }
     }
@@ -21,7 +21,7 @@ private struct LocationView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .disabled(sender != nil)
-            SecureField("Local PHAROS token", text: $token)
+            SecureField("Local Optis token", text: $token)
                 .disabled(sender != nil)
             Button(sender == nil ? "Start sending location" : "Stop sending location") {
                 if let sender {

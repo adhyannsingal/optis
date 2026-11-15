@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Optis Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #101619; color: #edf4f4; font: 1rem system-ui; margin: 0; }
+    main { max-width: 960px; margin: auto; padding: clamp(1rem, 5vw, 3rem); }
+    h1 { margin: 0 0 1rem; font-size: 1.8rem; }
+    form { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+    label { display: grid; gap: .4rem; }
+    input, button { font: inherit; padding: .55rem .75rem; border-radius: .4rem; }
+    input { color: inherit; background: #192326; border: 1px solid #809391; max-width: 100%; }
+    button { border: 0; background: #99ead2; color: #132825; font-weight: 650; cursor: pointer; }
+    button[disabled] { opacity: .45; cursor: default; }
+    p { color: #bbcecb; }
+    section { border-top: 1px solid #34494b; margin-top: 1.5rem; padding-top: .5rem; }
+    a { color: #99ead2; }
+    .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .75rem; }
+    form + .actions { margin-top: .75rem; }
+    output { display: block; color: #bbcecb; margin: .65rem 0; min-height: 1.4em; }
+    audio { max-width: 100%; }
+    canvas { display: block; width: 100%; height: auto; background: #080d0f; border: 1px solid #34494b; border-radius: .5rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Optis demo</h1>
+  <form>
+    <label>Optis token<input name="token" type="password" autocomplete="off" required></label>
+    <button type="submit">Start preview</button>
+    <button type="button" id="stop" disabled>Stop preview</button>
+  </form>
+  <p id="status" role="status">Enter the server token to see the live feed.</p>
+  <canvas width="640" height="360" aria-label="Live camera feed with object detection boxes"></canvas>
+  <section id="items" hidden>
+    <h2>Scene and item search</h2>
+    <div class="actions">
+      <button data-find="scene">What’s ahead?</button>
+      <button data-find="keys">Where are my keys?</button>
+      <button data-find="phone">Where’s my phone?</button>
+      <button data-find="bottle">Where’s my bottle?</button>
+    </div>
+    <form id="memory">
+      <label>Save a place for
+        <select name="item"><option>keys</option><option>phone</option><option>bottle</option></select>
+      </label>
+      <label>Place<input name="place" maxlength="300" placeholder="Entryway table"></label>
+      <button>Save place</button>
+      <button type="button" id="forget">Clear item memory</button>
+    </form>
+    <div class="actions">
+      <button id="mic" disabled>Record question</button>
+    </div>
+    <output id="voice-status" aria-live="polite"></output>
+    <output id="answer" aria-live="polite"></output>
+    <audio id="voice-audio" controls hidden></audio>
+  </section>
+  <section id="navigation" hidden>
+    <h2>Navigation</h2>
+    <div id="walking" hidden>
+      <form id="destination-search">
+        <label>Walking destination<input name="query" maxlength="200" placeholder="Place, address, or latitude, longitude" required></label>
+        <button>Find destination</button>
+      </form>
+      <output id="destination-status" aria-live="polite"></output>
+      <div id="destination-results" class="actions"></div>
+      <p>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>.</p>
+    </div>
+    <div class="actions">
+      <button data-route="standard">Start route replay</button>
+      <button data-route="noisy">Replay weak GPS</button>
+      <button data-step="next" disabled>Next replay step</button>
+      <button data-step="pause">Pause</button>
+      <button data-step="resume">Resume</button>
+      <button data-step="stop">Stop</button>
+      <button id="live-route" hidden>Start checked live route</button>
+    </div>
+    <label><span><input id="route-audio" type="checkbox"> Speak route cues</span></label>
+    <output id="route" aria-live="polite">No route started.</output>
+    <output id="gps">Waiting for a phone location fix.</output>
+  </section>
+</main>
+<script>
+  const form = document.querySelector("form");
+  const token = form.elements.token;
+  const start = form.querySelector('[type="submit"]');
+  const stop = document.querySelector("#stop");
+  const status = document.querySelector("#status");
+  const canvas = document.querySelector("canvas");
+  const context = canvas.getContext("2d");
+  const items = document.querySelector("#items");
+  const navigation = document.querySelector("#navigation");
+  const memory = document.querySelector("#memory");
+  const answer = document.querySelector("#answer");
+  const route = document.querySelector("#route");
+  const gps = document.querySelector("#gps");
+  const walking = document.querySelector("#walking");
+  const destinationSearch = document.querySelector("#destination-search");
+  const destinationResults = document.querySelector("#destination-results");
+  const destinationStatus = document.querySelector("#destination-status");
+  let searchID = 0;
+  const routeAudio = document.querySelector("#route-audio");
+  const next = document.querySelector('[data-step="next"]');
+  const liveRoute = document.querySelector("#live-route");
+  const mic = document.querySelector("#mic");
+  const voiceStatus = document.querySelector("#voice-status");
+  const player = document.querySelector("#voice-audio");
+  let recorder, micTimer, cancelRecording;
+  let actionID = 0;
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      ...options, cache: "no-store",
+      signal: controller.signal,
+      headers: {...options.headers, Authorization: "Bearer " + token.value.trim()},
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "Request failed.");
+    return result;
+  }
+
+  function intent(kind, fields = {}) {
+    const request_id = Array.from(crypto.getRandomValues(new Uint32Array(4))).join("-");
+    return api("/v1/intent", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({request_id, kind, ...fields}),
+    });
+  }
+
+  async function ask(kind, fields) {
+    const id = ++actionID;
+    player.pause();
+    answer.textContent = "Checking…";
+    try {
+      const result = await intent(kind, fields);
+      if (id === actionID) answer.textContent = result.text;
+    } catch (error) {
+      if (id === actionID) answer.textContent = error.message;
+    }
+  }
+
+  document.querySelectorAll("[data-find]").forEach(button => {
+    button.addEventListener("click", () => {
+      const item = button.dataset.find;
+      if (item === "scene") ask("scene");
+      else ask("find", {item});
+    });
+  });
+  memory.addEventListener("submit", event => {
+    event.preventDefault();
+    ask("remember", {item: memory.elements.item.value, place: memory.elements.place.value.trim()});
+  });
+  document.querySelector("#forget").addEventListener("click", () => ask("forget", {item: memory.elements.item.value}));
+
+  function showRoute(result) {
+    const message = result?.text || "No route started.";
+    if (route.textContent !== message) {
+      route.textContent = message;
+      if (routeAudio.checked && result?.speech && window.speechSynthesis && recorder?.state !== "recording") {
+        player.pause();
+        speechSynthesis.cancel();
+        speechSynthesis.speak(new SpeechSynthesisUtterance(result.speech));
+      }
+    }
+    if (result?.status === "stopped") window.speechSynthesis?.cancel();
+    next.disabled = !result?.data?.simulated || !result.data.active || result.data.paused;
+  }
+
+  async function routeAction(kind, fields) {
+    try {
+      showRoute(await intent(kind, fields));
+    } catch (error) {
+      route.textContent = error.message;
+    }
+  }
+  document.querySelectorAll("[data-route]").forEach(button => {
+    button.addEventListener("click", () => routeAction("start_route", {route_id: button.dataset.route}));
+  });
+  document.querySelectorAll("[data-step]").forEach(button => {
+    button.addEventListener("click", () => routeAction(button.dataset.step));
+  });
+  liveRoute.addEventListener("click", () => routeAction("start_route", {route_id: liveRoute.dataset.id}));
+
+  function showDestinations(result) {
+    destinationStatus.textContent = result.text;
+    destinationResults.replaceChildren();
+    for (const destination of result.data) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = destination.name;
+      if (result.data.filter(item => item.name === destination.name).length > 1) {
+        button.textContent += " (" + destination.lat.toFixed(5) + ", " + destination.lon.toFixed(5) + ")";
+      }
+      button.addEventListener("click", async () => {
+        const id = ++searchID;
+        destinationStatus.textContent = "Planning walking route…";
+        try {
+          const result = await intent("walk_to", {destination});
+          if (id !== searchID) return;
+          destinationStatus.textContent = "Walking route to " + destination.name;
+          showRoute(result);
+        } catch (error) {
+          if (id === searchID) destinationStatus.textContent = error.message;
+        }
+      });
+      destinationResults.append(button);
+    }
+  }
+
+  destinationSearch.addEventListener("submit", async event => {
+    event.preventDefault();
+    const id = ++searchID;
+    destinationResults.replaceChildren();
+    destinationStatus.textContent = "Searching the local map…";
+    try {
+      const result = await intent("find_destination", {query: destinationSearch.elements.query.value.trim()});
+      if (id === searchID) showDestinations(result);
+    } catch (error) {
+      if (id === searchID) destinationStatus.textContent = error.message;
+    }
+  });
+
+  async function monitor(session) {
+    try {
+      const health = await api("/v1/health");
+      if (controller !== session) return;
+      walking.hidden = !health.pedestrian_routing_configured;
+      liveRoute.hidden = !health.live_route_configured;
+      liveRoute.dataset.id = health.live_route_id;
+      routeAudio.disabled = !window.speechSynthesis;
+      mic.disabled = !health.voice_configured || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
+      voiceStatus.textContent = health.voice_configured
+        ? (mic.disabled ? "This browser cannot record audio." : "")
+        : "Voice needs XAI_API_KEY on the server.";
+      while (controller === session) {
+        const {route: current, location} = await api("/v1/status");
+        if (controller !== session) return;
+        if (current && !current.data?.simulated) showRoute(current);
+        gps.textContent = location
+          ? (location.age_seconds > 5 ? "Last phone fix is stale" : "Phone fix received") +
+            " · ±" + location.horizontal_accuracy_m.toFixed(1) + " m · " + location.age_seconds + " s old"
+          : "Waiting for a phone location fix.";
+        await new Promise(resolve => setTimeout(resolve, 750));
+      }
+    } catch {
+      if (controller === session) gps.textContent = "Backend status disconnected.";
+    }
+  }
+
+  mic.addEventListener("click", async () => {
+    if (recorder?.state === "recording") {
+      recorder.stop();
+      return;
+    }
+    const session = controller;
+    const id = ++actionID;
+    player.pause();
+    window.speechSynthesis?.cancel();
+    mic.disabled = true;
+    let stream;
+    try {
+      const type = ["audio/webm", "audio/mp4"].find(type => MediaRecorder.isTypeSupported(type));
+      if (!type) throw new Error("Use Chrome or Safari to record a voice question.");
+      stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      if (controller !== session) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const chunks = [];
+      const current = recorder = new MediaRecorder(stream, {mimeType: type});
+      current.ondataavailable = event => chunks.push(event.data);
+      current.onerror = () => {
+        cancelRecording?.();
+        if (controller === session) voiceStatus.textContent = "Microphone recording failed.";
+      };
+      cancelRecording = () => {
+        clearTimeout(micTimer);
+        if (current.state !== "inactive") current.stop();
+        stream.getTracks().forEach(track => track.stop());
+      };
+      current.onstop = async () => {
+        clearTimeout(micTimer);
+        stream.getTracks().forEach(track => track.stop());
+        if (recorder === current) recorder = cancelRecording = undefined;
+        if (controller !== session || id !== actionID) {
+          if (controller === session) {
+            mic.disabled = false;
+            mic.textContent = "Record question";
+          }
+          return;
+        }
+        mic.disabled = true;
+        mic.textContent = "Record question";
+        voiceStatus.textContent = "Transcribing…";
+        try {
+          const result = await api("/v1/voice", {
+            method: "POST", headers: {"Content-Type": type}, body: new Blob(chunks, {type}),
+          });
+          if (controller !== session || id !== actionID) return;
+          voiceStatus.textContent = "Heard: " + result.transcript + (result.voice_error ? " · " + result.voice_error : "");
+          answer.textContent = result.text;
+          if (["destinations", "destination_not_found"].includes(result.status)) {
+            ++searchID;
+            showDestinations(result);
+          }
+          if (result.data?.simulated !== undefined || result.status === "stopped") {
+            showRoute({...result, speech: ""});
+          }
+          if (result.audio && !window.speechSynthesis?.speaking) {
+            player.src = "data:" + result.audio_type + ";base64," + result.audio;
+            player.hidden = false;
+            player.play().catch(() => {});
+          }
+        } catch (error) {
+          if (controller === session && id === actionID) voiceStatus.textContent = error.message;
+        } finally {
+          if (controller === session) mic.disabled = false;
+        }
+      };
+      current.start();
+      mic.disabled = false;
+      mic.textContent = "Stop and ask";
+      voiceStatus.textContent = "Recording…";
+      micTimer = setTimeout(() => current.state === "recording" && current.stop(), 6000);
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop());
+      if (controller === session) {
+        mic.disabled = false;
+        voiceStatus.textContent = error.message;
+      }
+    }
+  });
+  let controller;
+
+  function end(message) {
+    controller?.abort();
+    controller = undefined;
+    ++actionID;
+    ++searchID;
+    cancelRecording?.();
+    window.speechSynthesis?.cancel();
+    player.pause();
+    player.hidden = true;
+    mic.textContent = "Record question";
+    items.hidden = navigation.hidden = true;
+    start.disabled = token.disabled = false;
+    stop.disabled = true;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    status.textContent = message;
+  }
+
+  async function preview(session, key) {
+    try {
+      while (!session.signal.aborted) {
+        const response = await fetch("/v1/camera/preview", {
+          signal: session.signal, cache: "no-store",
+          headers: { Authorization: "Bearer " + key },
+        });
+        if (!response.ok) {
+          if (controller === session) end(response.status === 401 ? "Check the camera token." : "Camera preview unavailable.");
+          return;
+        }
+        const {state, observation, image} = await response.json();
+        if (controller !== session) return;
+        if (image && observation) {
+          const frame = new Image();
+          frame.src = "data:image/jpeg;base64," + image;
+          await frame.decode();
+          if (controller !== session) return;
+          canvas.width = frame.naturalWidth;
+          canvas.height = frame.naturalHeight;
+          context.drawImage(frame, 0, 0);
+          context.lineWidth = 2;
+          context.font = "bold 14px system-ui";
+          const detections = observation.detections.filter(item => item.stable);
+          for (const item of detections) {
+            const [x1, y1, x2, y2] = item.bbox_xyxy_px;
+            const label = item.label + " " + Math.round(item.confidence * 100) + "%";
+            const labelTop = Math.max(0, y1 - 20);
+            context.strokeStyle = context.fillStyle = "#99ead2";
+            context.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            context.fillRect(x1, labelTop, context.measureText(label).width + 10, 20);
+            context.fillStyle = "#132825";
+            context.fillText(label, x1 + 5, labelTop + 15);
+          }
+          const names = [...new Set(detections.map(item => item.label))];
+          status.textContent = names.length ? "Live · " + names.join(", ") : "Live · No stable objects detected";
+        } else {
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          status.textContent = "Camera " + state.replaceAll("_", " ") + ".";
+        }
+        await new Promise(resolve => setTimeout(resolve, 125));
+      }
+    } catch {
+      if (controller === session) end("Preview disconnected. Start it again to reconnect.");
+    }
+  }
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    if (controller) return;
+    start.disabled = token.disabled = true;
+    stop.disabled = false;
+    status.textContent = "Connecting…";
+    controller = new AbortController();
+    items.hidden = navigation.hidden = false;
+    preview(controller, token.value.trim());
+    monitor(controller);
+  });
+  stop.addEventListener("click", () => end("Preview stopped."));
+</script>
+</body>
+</html>

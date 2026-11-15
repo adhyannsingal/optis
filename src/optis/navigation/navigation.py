@@ -51,10 +51,29 @@ def segment_distance(point, start, end):
     return distance(point, (start[0] + fraction * (end[0] - start[0]), start[1] + fraction * (end[1] - start[1])))
 
 
+def path_position(point, path):
+    """Return cross-track distance and progress along the nearest part of a maneuver."""
+    best_distance, progress, walked = math.inf, 0, 0
+    for index, (start, end) in enumerate(zip(path, path[1:])):
+        length = distance(start, end)
+        along = along_segment(point, start, end)
+        cross_track = segment_distance(point, start, end)
+        if cross_track < best_distance:
+            best_distance = cross_track
+            if index > 0:
+                along = max(0, along)
+            if index < len(path) - 2:
+                along = min(length, along)
+            progress = walked + along
+        walked += length
+    return best_distance, progress, walked
+
+
 class Navigation:
     def __init__(self, route=None, thresholds=None, *, live=False):
         self.live = live
         self.route = validate_route(route, allow_live=live) if route is not None else FixtureRouteProvider().get_route('du-bois-library')
+        self.paths = self.route.get('paths') or list(zip(self.route['points'], self.route['points'][1:]))
         self.thresholds = thresholds or Thresholds()
         self.active = False
         self.paused = False
@@ -165,35 +184,36 @@ class Navigation:
         self.last_timestamp = fix.timestamp
         recovered, self.weak = self.weak, False
         point, points = (fix.x, fix.y), self.route['points']
-        start, end = points[self.step:self.step + 2]
+        end = points[self.step + 1]
+        path = self.paths[self.step]
         final_step = self.step == len(points) - 2
-        along = along_segment(point, start, end)
+        cross_track, along, length = path_position(point, path)
         if not final_step:
             if distance(point, end) <= limits.turn_radius and (
                 not self.live or (
                     self.previous_point is not None
                     and distance(self.previous_point, end) <= limits.turn_radius
-                    and segment_distance(self.previous_point, start, end) <= limits.corridor
+                    and path_position(self.previous_point, path)[0] <= limits.corridor
                     and fix.accuracy <= limits.turn_radius
                 )
             ):
                 return self._advance(point, 'near_corner')
-            next_end = points[self.step + 2]
-            previous = self.previous_point
-            passed_corner = (previous is not None and
-                             segment_distance(previous, start, end) <= limits.corridor and
-                             distance(start, end) - limits.approach_window <= along_segment(previous, start, end) <= distance(start, end) + limits.turn_radius and
-                             along >= distance(start, end) - limits.turn_radius and
-                             segment_distance(point, end, next_end) <= limits.corridor and
-                             limits.turn_radius < along_segment(point, end, next_end) <= limits.max_corner_skip)
-            if passed_corner and (not self.live or fix.accuracy <= limits.turn_radius):
-                return self._advance(point, 'passed_corner_between_fixes')
-            if along > distance(start, end) + limits.turn_radius and segment_distance(point, end, next_end) > limits.corridor and not self.missed_announced:
+            next_cross_track, next_along, _ = path_position(point, self.paths[self.step + 1])
+            if self.previous_point is not None:
+                previous_cross_track, previous_along, _ = path_position(self.previous_point, path)
+                passed_corner = (previous_cross_track <= limits.corridor and
+                                 length - limits.approach_window <= previous_along <= length + limits.turn_radius and
+                                 along >= length - limits.turn_radius and
+                                 next_cross_track <= limits.corridor and
+                                 limits.turn_radius < next_along <= limits.max_corner_skip)
+                if passed_corner and (not self.live or fix.accuracy <= limits.turn_radius):
+                    return self._advance(point, 'passed_corner_between_fixes')
+            if along > length + limits.turn_radius and next_cross_track > limits.corridor and not self.missed_announced:
                 self.missed_announced = True
                 self.previous_point = None
                 self.off_since = now
-                return self.cue('missed_turn', 'possible missed turn. Progress paused; return to the checked route.')
-        if segment_distance(point, start, end) > (limits.corridor if self.live else limits.detour_distance):
+                return self.cue('missed_turn', 'possible missed turn. Route progress is paused.')
+        if cross_track > (limits.corridor if self.live else limits.detour_distance):
             self.arrival_count = 0
             self.previous_point = None
             if self.off_since is None:
@@ -203,7 +223,7 @@ class Navigation:
                 due = now - self.last_reroute >= limits.reroute_cooldown
                 if due:
                     self.last_reroute = now
-                return self.cue('detour', 'sustained detour detected. Live rerouting is unavailable; replay must return to the checked route.', reroute_due=due)
+                return self.cue('detour', 'sustained detour detected. Route progress is paused.', reroute_due=due)
             return self.cue('off_route', 'off the route; progress paused.', announce=False)
         self.previous_point = point
         self.off_since = None

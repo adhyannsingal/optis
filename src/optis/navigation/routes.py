@@ -1,4 +1,4 @@
-"""Validated route-provider boundary; only synthetic local-metre routes are enabled."""
+"""Validated route-provider boundary; validates local-metre route geometry and replay events."""
 
 from copy import deepcopy
 import json
@@ -21,7 +21,7 @@ def validate_route(document, *, allow_live=False):
     if not isinstance(document, dict) or type(document.get('simulated')) is not bool:
         raise RouteError('Route must declare whether it is simulated.')
     if not document['simulated'] and (not allow_live or document.get('events')):
-        raise RouteError('Live routes require a checked route file and cannot contain replay events.')
+        raise RouteError('Live routes require a live provider and cannot contain replay events.')
     if document.get('coordinate_system', 'local_metres') != 'local_metres':
         raise RouteError('Route geometry must use local metres.')
     if not isinstance(document.get('name'), str) or not document['name'].strip():
@@ -33,6 +33,17 @@ def validate_route(document, *, allow_live=False):
         raise RouteError('Consecutive route points must differ.')
     if not isinstance(instructions, list) or len(instructions) != len(points) - 1 or any(not isinstance(s, str) or not s.strip() or len(s) > 2000 for s in instructions):
         raise RouteError('Each segment needs a nonempty instruction.')
+    if "paths" in document:
+        paths = document["paths"]
+        if document["simulated"] or not isinstance(paths, list) or len(paths) != len(instructions):
+            raise RouteError("Expected one mapped path per live maneuver.")
+        for index, path in enumerate(paths):
+            if (not isinstance(path, list) or len(path) < 2 or path[0] != points[index]
+                    or path[-1] != points[index + 1] or any(
+                        not isinstance(point, list) or len(point) != 2 or not all(number(v) for v in point)
+                        for point in path
+                    ) or any(math.dist(a, b) < .001 for a, b in zip(path, path[1:]))):
+                raise RouteError("Mapped path contains invalid segments.")
     if not isinstance(events, list):
         raise RouteError('Replay events must be a list.')
     previous = -1
