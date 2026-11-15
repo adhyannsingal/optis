@@ -13,26 +13,44 @@ LOGGER = logging.getLogger(__name__)
 
 
 class HeadCamera:
-    def __init__(self, source, model: Path, checksum):
+    def __init__(self, source, model: Path, checksum, *, keyrings=None, camera_name="head camera"):
         self.source = source
         self.model = model
         self.checksum = checksum
+        self.keyrings = keyrings
+        self.camera_name = camera_name
+        self.record = None
         self.stop = Event()
         self.lock = Lock()
         self.observation = None
+        self.jpeg = None
         self.state = "starting"
         self.thread = Thread(target=self.run, name="head-camera", daemon=True)
 
-    def publish(self, state, observation=None):
+    def publish(self, state, observation=None, jpeg=None):
         with self.lock:
             self.state = state
             self.observation = observation
+            self.jpeg = jpeg
 
     def snapshot(self):
+        state, observation, _ = self.preview()
+        return state, observation
+
+    def preview(self):
         with self.lock:
             if self.observation and 0 <= monotonic() * 1000 - self.observation["seen_ms"] <= 1000:
-                return self.state, self.observation
-            return ("stale" if self.observation else self.state), None
+                return self.state, self.observation, self.jpeg
+            return ("stale" if self.observation else self.state), None, None
+
+    def start(self, record):
+        self.record = record
+        if self.keyrings:
+            self.keyrings.thread.start()
+        self.thread.start()
+
+    def keyring_snapshot(self):
+        return self.keyrings.snapshot() if self.keyrings else []
 
     def run(self):
         frame_id = 0
@@ -58,6 +76,8 @@ class HeadCamera:
                             self.stop.wait(0.1)
                             continue
                         jpeg, (width, height), _ = encode_capture(frame)
+                        if self.keyrings:
+                            self.keyrings.offer(frame, int(seen * 1000), self.record)
                         detections = detector(jpeg)
                         if monotonic() - seen > 1:
                             tracker = Tracker()
@@ -75,13 +95,18 @@ class HeadCamera:
                                 position=item["position"], pickup_zone=None,
                                 stable=tracker.tracks[item["track_id"]]["count"] >= 2,
                             ))
+                        phones = [box for box in boxes if box["label"] == "cell phone"]
+                        if len(phones) == 1 and phones[0]["stable"]:
+                            self.record("phone", seen_ms)
                         self.publish("ready", dict(
                             v=1, mode="live", source="head", frame_id=frame_id,
                             seen_ms=seen_ms, size_px=[width, height], detections=boxes,
                             fixture_id=None, reference_ok=False,
-                        ))
+                        ), jpeg)
                 finally:
                     capture.release()
+                    if self.keyrings:
+                        self.keyrings.clear()
                 self.publish("disconnected")
                 self.stop.wait(0.5)
         except Exception:
@@ -91,3 +116,5 @@ class HeadCamera:
     def close(self):
         self.stop.set()
         self.thread.join(timeout=2)
+        if self.keyrings:
+            self.keyrings.close()

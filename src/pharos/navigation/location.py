@@ -5,7 +5,7 @@ from time import monotonic
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 
-from .navigation import Fix, Navigation
+from .navigation import Fix, Navigation, Thresholds
 from .routes import RouteError, validate_route
 
 
@@ -19,9 +19,23 @@ class PhoneFix(BaseModel):
     age_at_send_ms: int = Field(ge=0, strict=True)
 
 
+def fix_age(packet, now):
+    wall_age = (now - packet.fix_time_utc).total_seconds()
+    sent_age = packet.age_at_send_ms / 1000
+    if not -1 <= wall_age - sent_age <= 2:
+        return None
+    return max(wall_age, sent_age, 0)
+
+
+def usable_origin(packet, now):
+    age = fix_age(packet, now)
+    limits = Thresholds()
+    return age is not None and age <= limits.max_age and packet.horizontal_accuracy_m <= limits.max_accuracy
+
+
 class PhoneRoute:
-    def __init__(self, document):
-        if document.get("verified") is not True:
+    def __init__(self, document, *, mapped_paths=None):
+        if mapped_paths is None and document.get("verified") is not True:
             raise RouteError("The local route must be physically checked before enabling live guidance.")
         self.route_id = document["id"]
         points = document["waypoints"]
@@ -32,12 +46,12 @@ class PhoneRoute:
             raise RouteError("Expected at least two valid latitude/longitude waypoints.")
         self.latitude, self.longitude = points[0]
         local = [list(self.project(*point)) for point in points]
-        if any(math.hypot(*point) > 1000 for point in local):
+        if mapped_paths is None and any(math.hypot(*point) > 1000 for point in local):
             raise RouteError("The first live route is limited to a local test area.")
-        self.geometry = validate_route(
-            dict(name=document["name"], simulated=False, points=local, instructions=document["instructions"]),
-            allow_live=True,
-        )
+        route = dict(name=document["name"], simulated=False, points=local, instructions=document["instructions"])
+        if mapped_paths is not None:
+            route["paths"] = [[list(self.project(*point)) for point in path] for path in mapped_paths]
+        self.geometry = validate_route(route, allow_live=True)
         self.reset()
 
     def reset(self):
@@ -62,15 +76,13 @@ class PhoneRoute:
             raise ValueError("Fix timestamp must include a UTC offset.")
         if packet.seq <= self.sequence:
             return navigation.tick(now)
-        wall_age = (datetime.now(UTC) - packet.fix_time_utc).total_seconds()
-        age_at_send = packet.age_at_send_ms / 1000
+        age = fix_age(packet, datetime.now(UTC))
         # The difference includes network transit and wall-clock skew. Hold if
         # the clocks disagree by more than the small allowed local-link budget.
-        if packet.fix_time_utc < self.started_wall or not (-1 <= wall_age - age_at_send <= 2):
+        if packet.fix_time_utc < self.started_wall or age is None:
             self.last_good = None
             return navigation.weak_signal()
         self.sequence = packet.seq
-        age = max(wall_age, age_at_send, 0)
         x, y = self.project(packet.lat_deg, packet.lon_deg)
         fix = Fix(now - age, x, y, packet.horizontal_accuracy_m)
         if age > navigation.thresholds.max_age or fix.accuracy > navigation.thresholds.max_accuracy:
