@@ -5,6 +5,15 @@ import path from "node:path";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Local FastAPI listens on 127.0.0.1:8000. Keep tokens in memory, not Vite env.
+  server: {
+    proxy: {
+      "/v1": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
