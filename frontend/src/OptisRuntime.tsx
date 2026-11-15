@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { playCurrentCue } from "./routeAudio";
 import { optisApi, OptisApiError } from "./optisApi";
 import { useBrowserLocation } from "./useBrowserLocation";
 import { Workspace } from "./phase2/Workspace";
@@ -20,6 +21,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   const [available, setAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [connectionError, setConnectionError] = useState("");
   const [reply, setReply] = useState<Reply | null>(null);
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [previewing, setPreviewing] = useState(false);
@@ -35,6 +37,17 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   const player = useRef<HTMLAudioElement | null>(null);
   const routePlayer = useRef<HTMLAudioElement | null>(null);
   const generation = useRef(0);
+  const audioEpoch = useRef(0);
+  const latestStatus = useRef<BackendStatus | null>(null);
+  const acceptStatus = useCallback((next: BackendStatus) => {
+    if (latestStatus.current && next.audio.generation < latestStatus.current.audio.generation) return;
+    if (next.audio.generation !== latestStatus.current?.audio.generation) {
+      audioEpoch.current += 1;
+      routePlayer.current?.pause();
+    }
+    latestStatus.current = next;
+    setStatus(next);
+  }, []);
   const mounted = useRef(true);
   const location = useBrowserLocation(token);
 
@@ -62,9 +75,9 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
         const [nextHealth, nextStatus] = await Promise.all([optisApi.health(), optisApi.status(token)]);
         if (cancelled) return;
         setHealth(nextHealth);
-        setStatus(nextStatus);
+        acceptStatus(nextStatus);
         setAvailable(true);
-        setError("");
+        setConnectionError("");
       } catch (failure) {
         if (cancelled) return;
         setAvailable(false);
@@ -72,8 +85,8 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
         setStatus(null);
         if (failure instanceof OptisApiError && failure.statusCode === 401) {
           setToken("");
-          setError("Session expired. Enter the current local token.");
-        } else setError(message(failure));
+          setConnectionError("Session expired. Enter the current local token.");
+        } else setConnectionError(message(failure));
       } finally {
         polling = false;
       }
@@ -84,7 +97,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [active, token]);
+  }, [active, token, acceptStatus]);
 
   useEffect(() => {
     if (!active || !token || !previewing) return;
@@ -117,18 +130,20 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   }, [active, token, previewing]);
 
   useEffect(() => {
-    if (!active || !token || !playback) return;
+    if (!active || !token || !playback || voiceState !== "idle" || busy || !available) return;
     let cancelled = false;
     let polling = false;
     const take = async () => {
       if (polling) return;
       polling = true;
       try {
-        const { cue } = await optisApi.navigationAudio(token);
-        if (cancelled || !cue?.audio || !cue.audio_type || !routePlayer.current) return;
-        routePlayer.current.pause();
-        routePlayer.current.src = `data:${cue.audio_type};base64,${cue.audio}`;
-        await routePlayer.current.play();
+        const epoch = audioEpoch.current;
+        await playCurrentCue(
+          () => optisApi.navigationAudio(token),
+          () => !cancelled && epoch === audioEpoch.current,
+          () => latestStatus.current?.audio.generation,
+          routePlayer.current,
+        );
       } catch (failure) {
         if (!cancelled) setVoiceMessage(`Navigation audio unavailable: ${message(failure)}`);
       } finally {
@@ -138,9 +153,10 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     void take();
     const interval = window.setInterval(() => void take(), 1000);
     return () => { cancelled = true; window.clearInterval(interval); routePlayer.current?.pause(); };
-  }, [active, token, playback]);
+  }, [active, token, playback, voiceState, busy, available, status?.audio.generation]);
 
   const stopAudio = useCallback(() => {
+    audioEpoch.current += 1;
     player.current?.pause();
     if (player.current) player.current.currentTime = 0;
     routePlayer.current?.pause();
@@ -166,6 +182,11 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     setAvailable(false);
     setHealth(null);
     setStatus(null);
+    latestStatus.current = null;
+    setError("");
+    setConnectionError("");
+    setBusy(false);
+    setVoiceMessage("");
     setReply(null);
     setEvents([]);
     setPreviewing(false);
@@ -177,19 +198,22 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
     event.preventDefault();
     const value = typedToken.trim();
     if (!value) return;
+    const version = ++generation.current;
     setBusy(true);
     try {
       const [nextHealth, nextStatus] = await Promise.all([optisApi.health(), optisApi.status(value)]);
+      if (!mounted.current || version !== generation.current) return;
       setHealth(nextHealth);
-      setStatus(nextStatus);
+      acceptStatus(nextStatus);
       setToken(value);
       setTypedToken("");
       setAvailable(true);
+      setConnectionError("");
       setError("");
     } catch (failure) {
-      setError(message(failure));
+      if (mounted.current && version === generation.current) setError(message(failure));
     } finally {
-      setBusy(false);
+      if (mounted.current && version === generation.current) setBusy(false);
     }
   }
 
@@ -206,6 +230,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
 
   async function runIntent(title: string, fields: Omit<Intent, "request_id">): Promise<Reply | null> {
     if (!token) return null;
+    stopAudio();
     if (fields.kind === "stop") {
       cancelVoice();
       stopAudio();
@@ -218,13 +243,22 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
       const result = await optisApi.intent(token, fields);
       if (!mounted.current || version !== generation.current) return null;
       showReply(title, result);
-      void optisApi.status(token).then(setStatus).catch(() => {});
+      try {
+        const nextStatus = await optisApi.status(token);
+        if (!mounted.current || version !== generation.current) return null;
+        acceptStatus(nextStatus);
+      } catch (failure) {
+        if (mounted.current && version === generation.current) {
+          setAvailable(false);
+          setConnectionError(message(failure));
+        }
+      }
       return result;
     } catch (failure) {
       if (mounted.current && version === generation.current) setError(message(failure));
       return null;
     } finally {
-      if (mounted.current) setBusy(false);
+      if (mounted.current && version === generation.current) setBusy(false);
     }
   }
 
@@ -237,6 +271,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
       setVoiceMessage("This browser cannot record a supported audio format.");
       return;
     }
+    stopAudio();
     const version = ++generation.current;
     setVoiceState("starting");
     setVoiceMessage("");
@@ -293,7 +328,7 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
   }
 
   const data: WorkspaceData = {
-    available, health, status, reply, events, busy, error, preview, previewing, cameraError,
+    available, health, status, reply, events, busy, error: error || connectionError, preview, previewing, cameraError,
     voiceState, voiceMessage,
     canRecord: !!health?.voice_configured && typeof MediaRecorder !== "undefined" && !!navigator.mediaDevices?.getUserMedia,
     hasResponseAudio: !!audioSource,
@@ -331,8 +366,8 @@ export default function OptisRuntime({ active, exit }: { active: boolean; exit: 
                 onChange={(event) => setTypedToken(event.target.value)} required />
               <button type="submit" disabled={busy}>{busy ? "Connecting…" : "Connect"}</button>
             </form>
-            {error && <p role="alert">{error}</p>}
-            <button className="optis-connect-back" onClick={exit}>Return to landing</button>
+            {(error || connectionError) && <p role="alert">{error || connectionError}</p>}
+            <button className="optis-connect-back" onClick={() => { clearSession(); exit(); }}>Return to landing</button>
           </div>
         </main>
       )}

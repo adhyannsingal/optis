@@ -27,7 +27,7 @@ type LensGeometry = {
 // The focal point was measured from the red circular lens in the 1078 × 375 source asset.
 // Future hardware only needs a new source, normalized lens point, and optional scale tuning.
 const productZoomConfig: ProductZoomConfig = {
-  imageSrc: "/stride-glasses.png",
+  imageSrc: "/optis-glasses.png",
   lensPoint: {
     x: 0.9309,
     y: 0.2242,
@@ -133,7 +133,7 @@ function CameraZoomTransition({
   );
 }
 
-function PharosLanding({ enterApp, prepareApp }: { enterApp: () => void; prepareApp: () => void }) {
+function OptisLanding({ enterApp, prepareApp }: { enterApp: () => void; prepareApp: () => void }) {
   const [zooming, setZooming] = useState(false);
   const transitionStarted = useRef(false);
   const mounted = useRef(true);
@@ -447,7 +447,7 @@ export default function App() {
       >
         <OptisRuntime exit={exitApp} active={page === "app"} />
       </div>
-      {page !== "app" && <PharosLanding enterApp={enterApp} prepareApp={prepareApp} />}
+      {page !== "app" && <OptisLanding enterApp={enterApp} prepareApp={prepareApp} />}
     </div>
   );
 }
