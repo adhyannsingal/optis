@@ -196,30 +196,31 @@
   left: 0;
   display: flex;
   width: 100%;
+  padding-inline: 1.5vw;
   align-items: center;
   justify-content: space-between;
   color: var(--text-primary);
-  font-size: clamp(124px, 24.4vw, 350px);
+  font-size: clamp(88px, 22vw, 320px);
   font-weight: 650;
   letter-spacing: -0.065em;
   line-height: 0.8;
-  opacity: 0.055;
+  opacity: 0.065;
   white-space: nowrap;
 }
 
 .stage-word span:first-child {
-  margin-left: -0.035em;
+  margin-left: 0;
 }
 
 .stage-word span:last-child {
-  margin-right: -0.035em;
+  margin-right: 0;
 }
 
 .spectacles {
   position: relative;
   z-index: 2;
   display: flex;
-  width: min(67vw, 970px);
+  width: 85vw;
   height: 380px;
   align-items: center;
   justify-content: center;
@@ -237,6 +238,7 @@
   justify-content: center;
   background: transparent;
   animation: spec-float 5s ease-in-out infinite;
+  will-change: transform;
 }
 
 .spectacles-float img {
@@ -245,7 +247,7 @@
   height: auto;
   object-fit: contain;
   background: transparent;
-  filter: drop-shadow(0 22px 18px rgb(30 28 27 / 18%));
+  backface-visibility: hidden;
   user-select: none;
 }
 
@@ -262,43 +264,26 @@
 }
 
 .landing.is-zooming .motion-stage .spectacles {
-  animation: camera-lens-zoom var(--camera-zoom-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
   will-change: transform;
 }
 
 .landing.is-zooming .spectacles-float {
-  animation-play-state: paused;
+  will-change: auto;
 }
 
 .landing.is-zooming .stage-word,
 .landing.is-zooming .hero-copy,
 .landing.is-zooming .topbar {
-  animation: landing-content-out 0.42s ease-out both;
+  will-change: opacity;
 }
 
 @keyframes spec-float {
   0%,
   100% {
-    transform: translateY(-8px) rotate(-1deg);
+    transform: translate3d(0, -6px, 0);
   }
   50% {
-    transform: translateY(10px) rotate(1deg);
-  }
-}
-
-@keyframes camera-lens-zoom {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(var(--camera-translate-x), var(--camera-translate-y), 0)
-      scale(var(--camera-zoom-scale));
-  }
-}
-
-@keyframes landing-content-out {
-  to {
-    opacity: 0;
+    transform: translate3d(0, 6px, 0);
   }
 }
 
@@ -327,7 +312,6 @@
 }
 
 .camera-zoom-transition.is-active .camera-dark-aperture {
-  animation: camera-aperture-track var(--camera-zoom-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
   will-change: transform;
 }
 
@@ -341,38 +325,36 @@
 }
 
 .camera-zoom-transition.is-active .camera-dark-fill {
-  animation: camera-aperture-fill var(--camera-zoom-duration) cubic-bezier(0.32, 0, 0.1, 1) both;
   will-change: transform, opacity;
 }
 
-@keyframes camera-aperture-track {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(var(--camera-translate-x), var(--camera-translate-y), 0)
-      scale(var(--camera-zoom-scale));
-  }
+.experience-root {
+  min-height: 100vh;
+  min-height: 100svh;
+  background: #08090b;
 }
 
-@keyframes camera-aperture-fill {
-  0%,
-  42% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-  60% {
-    opacity: 0.22;
-    transform: scale(1);
-  }
-  80% {
-    opacity: 0.97;
-    transform: scale(calc(var(--camera-fill-scale) * 0.44));
-  }
-  100% {
-    opacity: 1;
-    transform: scale(var(--camera-fill-scale));
-  }
+.app-shell-layer {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-shell-layer.is-visible {
+  z-index: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.app-shell-layer.is-staged {
+  visibility: visible;
+}
+
+.landing {
+  position: relative;
+  z-index: 2;
 }
 
 .pharos-app-shell {
@@ -428,10 +410,10 @@
   font-size: 13px;
 }
 
-.app-shell-brand,
-.app-ready-state,
-.pharos-app-shell button {
-  animation: app-content-arrive 0.5s 0.08s ease-out both;
+.app-shell-layer:is(.is-staged, .is-visible) .app-shell-brand,
+.app-shell-layer:is(.is-staged, .is-visible) .app-ready-state,
+.app-shell-layer:is(.is-staged, .is-visible) .pharos-app-shell button {
+  animation: app-content-arrive 0.5s ease-out both;
 }
 
 .pharos-app-shell button:hover {
@@ -503,7 +485,7 @@
   font-size: 13px;
 }
 .pharos-app-shell .app-actions button:disabled {
-  opacity: .35;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 .app-response {
@@ -521,8 +503,12 @@
   box-shadow: none;
 }
 @media (max-width: 580px) {
-  .app-console { margin-top: 90px; }
-  .pharos-app-shell .app-actions button { flex: 1 1 42%; }
+  .app-console {
+    margin-top: 90px;
+  }
+  .pharos-app-shell .app-actions button {
+    flex: 1 1 42%;
+  }
 }
 
 @media (max-width: 900px) {
@@ -540,11 +526,9 @@
 
   .stage-word {
     top: 20%;
-    font-size: 24.5vw;
   }
 
   .spectacles {
-    width: 88vw;
     height: 290px;
   }
 }
@@ -573,11 +557,9 @@
 
   .stage-word {
     top: 19%;
-    font-size: 25.5vw;
   }
 
   .spectacles {
-    width: 98vw;
     height: 235px;
   }
 
@@ -611,7 +593,6 @@
   }
 
   .spectacles {
-    width: min(65vw, 760px);
     height: 260px;
   }
 }
