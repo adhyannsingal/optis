@@ -54,10 +54,11 @@ const productZoomConfig: ProductZoomConfig = {
     x: 0.9309,
     y: 0.2242,
   },
-  lensDiameterRatio: 0.05,
+  // The visible red disc is approximately 16 px across in the 1078 px source.
+  lensDiameterRatio: 16 / 1078,
   zoomScale: 15,
-  durationMs: 1100,
-  destinationColor: "#08090B",
+  durationMs: 1450,
+  destinationColor: "#650B17",
 };
 
 function Spectacles({
@@ -161,7 +162,7 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
     const product = productRef.current;
     const image = imageRef.current;
     const anchor = lensAnchorRef.current;
-    if (!product || !image || !anchor || image.clientWidth === 0) return null;
+    if (!product || !image || !anchor || !image.complete || image.naturalWidth === 0 || image.clientWidth === 0) return null;
 
     const productRect = product.getBoundingClientRect();
     const imageRect = image.getBoundingClientRect();
@@ -214,6 +215,13 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
 
       const measuredGeometry = measureLens();
       if (!measuredGeometry) {
+        const image = imageRef.current;
+        if (!image || (image.complete && image.naturalWidth === 0)) {
+          // Fail open rather than hanging forever when the source image cannot load.
+          transitionStarted.current = true;
+          enterApp();
+          return;
+        }
         pendingFrame.current = window.requestAnimationFrame(attemptTransition);
         return;
       }
@@ -307,7 +315,7 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
 
       <nav className="topbar" aria-label="Public navigation">
         <button className="enter-button" onClick={startTransition}>
-          <span>Explore Optis</span>
+          <span>Explore OPTIS</span>
           <span className="enter-arrow" aria-hidden="true">
             ↗
           </span>
