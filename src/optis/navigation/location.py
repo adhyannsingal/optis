@@ -51,6 +51,7 @@ class PhoneRoute:
         if mapped_paths is not None:
             route["paths"] = [[list(self.project(*point)) for point in path] for path in mapped_paths]
         self.geometry = validate_route(route, allow_live=True)
+        self.mapped_paths = mapped_paths
         self.reset()
 
     def reset(self):
@@ -58,6 +59,7 @@ class PhoneRoute:
         self.started_wall = datetime.now(UTC)
         self.last_good = None
         self.origin_confirmed = False
+        self.accepted_position = None
 
     def project(self, latitude, longitude):
         delta_longitude = (longitude - self.longitude + 180) % 360 - 180
@@ -101,4 +103,9 @@ class PhoneRoute:
                 return navigation.weak_signal("Start near the beginning of the checked route.")
             self.origin_confirmed = True
         self.last_good = fix
-        return navigation.update(fix, now)
+        result = navigation.update(fix, now)
+        if result["status"] in {"off_route", "detour", "missed_turn", "weak_signal", "invalid_fix", "ignored_fix"}:
+            self.last_good = previous
+        else:
+            self.accepted_position = (packet.lat_deg, packet.lon_deg)
+        return result
