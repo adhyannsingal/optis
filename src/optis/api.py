@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from starlette.concurrency import run_in_threadpool
 
 from .interaction.store import Store
-from .interaction.voice import AUDIO_FILES, MAX_AUDIO_BYTES, VoiceError, XaiVoice, command
+from .interaction.voice import AUDIO_FILES, MAX_AUDIO_BYTES, SpeechQueue, VoiceError, XaiVoice, command
 from .navigation.location import PhoneFix, PhoneRoute, fix_age, usable_origin
 from .navigation.navigation import Navigation, Thresholds as NavigationThresholds
 from .navigation.routes import DEFAULT_ROUTE, FixtureRouteProvider, RouteError
@@ -36,12 +36,13 @@ class WalkDestination(BaseModel):
 class Intent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: str = Field(min_length=1, max_length=128)
-    kind: Literal["scene", "find", "remember", "forget", "start_route", "next", "pause", "resume", "stop", "retrieve", "find_destination", "walk_to"]
+    kind: Literal["scene", "find", "remember", "forget", "start_route", "next", "pause", "resume", "stop", "retrieve", "find_destination", "walk_to", "navigate_to", "choose_destination", "recalculate"]
     item: Literal["keys", "phone", "bottle"] | None = None
     place: str | None = Field(default=None, min_length=1, max_length=300)
     route_id: str | None = None
     query: str | None = Field(default=None, min_length=1, max_length=200)
     destination: WalkDestination | None = None
+    choice: int | None = Field(default=None, ge=1, le=6)
 
 
 def item_result(camera, item=None):
@@ -69,6 +70,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
     navigation = None
     live_source = None
     route_generation = 0
+    planned_fix_seq = -1
+    pending_destinations = None
     recent_sightings = {}
     forgotten_at = {}
     last_fix = None
@@ -86,6 +89,29 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         except OSError:
             return None
         return XaiVoice(key) if key else None
+
+    speech = SpeechQueue(active_voice)
+
+    def publish(cue):
+        if cue and cue.get("speech"):
+            if cue["status"] in {"weak_signal", "missed_turn", "detour", "turn", "arrived"}:
+                speech.clear()
+            speech.submit(cue)
+        return cue
+
+    def route_map():
+        if not navigation or not navigation.live or not live_source or not live_source.mapped_paths:
+            return None
+        return {
+            "active": navigation.active, "paused": navigation.paused,
+            "name": navigation.route["name"], "step": navigation.step,
+            "position": live_source.accepted_position,
+            "destination": live_source.mapped_paths[-1][-1],
+            "paths": live_source.mapped_paths,
+            "maneuvers": [{"index": index, "instruction": instruction, "end": path[-1]}
+                          for index, (instruction, path) in enumerate(zip(
+                              navigation.route["instructions"], live_source.mapped_paths))],
+        }
 
     def record(item, seen_ms):
         with lock:
@@ -148,11 +174,11 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
     def status(authorization: str | None = Header(default=None)):
         authorize(authorization)
         with lock:
-            route_status = navigation.last_cue if navigation else None
+            route_status = navigation.last_state if navigation else None
             if navigation and navigation.live and navigation.active and not navigation.paused:
-                current = navigation.tick(monotonic())
-                if current["status"] == "weak_signal":
-                    route_status = current
+                latest = navigation.last_timestamp if navigation.last_timestamp is not None else navigation.started_at
+                if latest is not None and monotonic() - latest > navigation.thresholds.max_age:
+                    route_status = publish(navigation.weak_signal())
             location_status = None
             if last_fix:
                 packet, received = last_fix
@@ -160,8 +186,18 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 location_status = {
                     "seq": packet.seq, "horizontal_accuracy_m": packet.horizontal_accuracy_m,
                     "age_seconds": round(max(age, monotonic() - received), 1),
+                    "ready": usable_origin(packet, datetime.now(UTC)) and monotonic() - received <= 5,
                 }
-            return {"route": route_status, "location": location_status, "arm": "disabled"}
+            return {"route": route_status, "route_map": route_map(), "location": location_status,
+                    "audio": speech.status(), "arm": "disabled"}
+
+    @app.get("/v1/navigation/audio")
+    def navigation_audio(authorization: str | None = Header(default=None)):
+        authorize(authorization)
+        item = speech.take()
+        if item:
+            item["audio"] = b64encode(item["audio"]).decode()
+        return JSONResponse({"cue": item}, headers={"Cache-Control": "no-store"})
 
     @app.post("/v1/location")
     def location(packet: PhoneFix, authorization: str | None = Header(default=None)):
@@ -181,18 +217,20 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             if not navigation or not navigation.live:
                 raise HTTPException(409, "Start the checked route before sending live fixes.")
             try:
-                return live_source.update(navigation, packet)
+                return publish(live_source.update(navigation, packet))
             except ValueError as error:
                 raise HTTPException(422, str(error)) from error
 
     def plan_walk(request):
-        nonlocal navigation, live_source, route_generation
+        nonlocal navigation, live_source, route_generation, planned_fix_seq, pending_destinations
         if not request.destination:
             raise HTTPException(422, "Choose a walking destination.")
         selected = Destination(**request.destination.model_dump())
         with lock:
             if not last_fix or not usable_origin(last_fix[0], datetime.now(UTC)):
                 raise HTTPException(409, "Waiting for a fresh, accurate phone GPS fix.")
+            if request.kind == "recalculate" and last_fix[0].seq <= planned_fix_seq:
+                raise HTTPException(409, "Wait for a new fresh phone GPS fix before recalculating.")
             origin = last_fix[0].lat_deg, last_fix[0].lon_deg
             route_generation += 1
             generation = route_generation
@@ -218,17 +256,36 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             route.reset()
             navigation = Navigation(route.geometry, live=True)
             live_source = route
-            return dict(request_id=request.request_id, **navigation.start())
+            pending_destinations = None
+            planned_fix_seq = packet.seq
+            speech.clear()
+            return dict(request_id=request.request_id, **publish(navigation.start()))
 
     @app.post("/v1/intent")
     def intent(request: Intent, authorization: str | None = Header(default=None)):
-        nonlocal navigation, live_source, route_generation
+        nonlocal navigation, live_source, route_generation, pending_destinations
         authorize(authorization)
-        if request.kind in {"find_destination", "walk_to"}:
+        if request.kind in {"find_destination", "walk_to", "navigate_to", "choose_destination", "recalculate"}:
             if not router:
                 raise HTTPException(503, "Valhalla pedestrian routing is not configured.")
             if request.kind == "walk_to":
                 return plan_walk(request)
+            if request.kind == "recalculate":
+                with lock:
+                    if not live_source or not live_source.mapped_paths or not navigation or not navigation.active:
+                        raise HTTPException(409, "Start a mapped walking route before recalculating.")
+                    lat, lon = live_source.mapped_paths[-1][-1]
+                    destination = WalkDestination(name=navigation.route["name"], lat=lat, lon=lon)
+                return plan_walk(request.model_copy(update={"destination": destination}))
+            if request.kind == "choose_destination":
+                with lock:
+                    candidates = pending_destinations
+                    if not candidates or monotonic() > candidates[1] or not request.choice or request.choice > len(candidates[0]):
+                        raise HTTPException(409, "Destination choices expired. Ask for the place again.")
+                    selected = candidates[0][request.choice - 1]
+                    pending_destinations = None
+                return plan_walk(request.model_copy(update={"destination": WalkDestination(
+                    name=selected.name, lat=selected.lat, lon=selected.lon)}))
             if not request.query or not request.query.strip():
                 raise HTTPException(422, "Enter a place name, address, or coordinates.")
             with lock:
@@ -242,10 +299,26 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             except RouteError as error:
                 raise HTTPException(422, str(error)) from None
             if not matches:
+                if request.kind == "navigate_to":
+                    with lock:
+                        pending_destinations = None
                 return dict(request_id=request.request_id, status="destination_not_found",
                             text="No match in the local map. Try a fuller name, address, or coordinates.", data=[])
-            text = f"Found {matches[0].name}. Choose it in the dashboard to start." if len(matches) == 1 else (
-                f"Found {len(matches)} matches. Choose your destination in the dashboard.")
+            if request.kind == "navigate_to" and len(matches) == 1:
+                selected = matches[0]
+                return plan_walk(request.model_copy(update={"destination": WalkDestination(
+                    name=selected.name, lat=selected.lat, lon=selected.lon)}))
+            if request.kind == "navigate_to":
+                with lock:
+                    pending_destinations = (matches, monotonic() + 60)
+            if len(matches) == 1:
+                text = f"Found {matches[0].name}. Choose it in the dashboard to start."
+            else:
+                names = [match.name for match in matches]
+                options = [f"{index}: {match.name}" + (
+                    f" at {match.lat:.5f}, {match.lon:.5f}" if names.count(match.name) > 1 else "")
+                           for index, match in enumerate(matches, 1)]
+                text = f"Found {len(matches)} matches: " + "; ".join(options) + ". Say choose first or choose second, or select one in the dashboard."
             return dict(request_id=request.request_id, status="destinations", text=text,
                         data=[dict(name=match.name, lat=match.lat, lon=match.lon) for match in matches])
         with lock:
@@ -294,20 +367,27 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 else:
                     raise HTTPException(404, "Unknown route. Use standard, noisy, or the configured checked route.")
                 route_generation += 1
-                result = navigation.start()
+                speech.clear()
+                result = publish(navigation.start())
                 return dict(request_id=request.request_id, **result)
             elif kind in {"next", "pause", "resume"} and navigation:
                 if kind == "pause":
                     route_generation += 1
+                    speech.clear()
                 if kind == "resume" and navigation.live and navigation.paused:
                     live_source.last_good = None
                 method = {"next": navigation.next_event, "pause": navigation.pause, "resume": navigation.resume}[kind]
-                return dict(request_id=request.request_id, **method())
+                if kind == "resume":
+                    speech.clear()
+                return dict(request_id=request.request_id, **publish(method()))
             elif kind == "stop":
                 route_generation += 1
+                pending_destinations = None
+                speech.clear()
                 if navigation:
                     navigation.stop()
                 status_code, text = "stopped", "Stopped."
+                publish({"status": "stopped", "speech": text, "data": {"step": None}})
             elif kind == "retrieve":
                 status_code, text = "arm_disabled", "Arm execution is unavailable in this build."
             else:
@@ -317,6 +397,8 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
     @app.post("/v1/voice")
     async def ask_voice(request: Request, authorization: str | None = Header(default=None)):
         authorize(authorization)
+        with lock:
+            voice_generation = route_generation
         adapter = active_voice()
         if not adapter:
             raise HTTPException(503, "Set XAI_API_KEY on the Optis server to enable voice.")
@@ -338,14 +420,23 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         result = {"status": "unknown_command", "text": "Try asking what’s ahead, where your keys are, or to walk to a place."}
         if fields:
             try:
-                result = await run_in_threadpool(intent, Intent(request_id=str(uuid4()), **fields), authorization)
+                with lock:
+                    cancelled = voice_generation != route_generation
+                if cancelled:
+                    result = {"status": "stopped", "text": "That voice request was cancelled."}
+                else:
+                    result = await run_in_threadpool(intent, Intent(request_id=str(uuid4()), **fields), authorization)
             except HTTPException as error:
                 result = {"status": "command_unavailable", "text": str(error.detail)}
 
         result["transcript"] = transcript
+        if result["status"] in {"route_started", "route_resumed", "route_paused", "stopped"}:
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
         try:
             spoken, mime = await run_in_threadpool(adapter.speak, result["text"])
-            result.update(audio=b64encode(spoken).decode(), audio_type=mime)
+            with lock:
+                if voice_generation == route_generation:
+                    result.update(audio=b64encode(spoken).decode(), audio_type=mime)
         except VoiceError as error:
             result["voice_error"] = str(error)
         return JSONResponse(result, headers={"Cache-Control": "no-store"})
