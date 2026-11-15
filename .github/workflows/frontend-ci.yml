@@ -1,4 +1,4 @@
-name: PHAROS frontend validation
+name: Optis frontend validation
 on:
   push:
     branches:
