@@ -56,7 +56,9 @@ const productZoomConfig: ProductZoomConfig = {
   },
   // The visible red disc is approximately 16 px across in the 1078 px source.
   lensDiameterRatio: 16 / 1078,
-  zoomScale: 15,
+  // Large enough that the measured lens itself becomes the viewport during the dive.
+  // The red interior only has to finish the corners; it is not a second scene.
+  zoomScale: 48,
   durationMs: 1450,
   destinationColor: "#650B17",
 };
@@ -148,12 +150,22 @@ function CameraZoomTransition({
   );
 }
 
-function OptisLanding({ enterApp }: { enterApp: () => void }) {
+function OptisLanding({
+  enterApp,
+  onDiveStart,
+}: {
+  enterApp: () => void;
+  onDiveStart: () => void;
+}) {
   const [zooming, setZooming] = useState(false);
   const [lensGeometry, setLensGeometry] = useState<LensGeometry | null>(null);
   const transitionStarted = useRef(false);
   const transitionTimer = useRef<number | null>(null);
   const pendingFrame = useRef<number | null>(null);
+  const enterAppRef = useRef(enterApp);
+  const onDiveStartRef = useRef(onDiveStart);
+  enterAppRef.current = enterApp;
+  onDiveStartRef.current = onDiveStart;
   const productRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const lensAnchorRef = useRef<HTMLSpanElement>(null);
@@ -205,7 +217,7 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) {
       transitionStarted.current = true;
-      enterApp();
+      enterAppRef.current();
       return;
     }
 
@@ -219,7 +231,7 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
         if (!image || (image.complete && image.naturalWidth === 0)) {
           // Fail open rather than hanging forever when the source image cannot load.
           transitionStarted.current = true;
-          enterApp();
+          enterAppRef.current();
           return;
         }
         pendingFrame.current = window.requestAnimationFrame(attemptTransition);
@@ -227,12 +239,18 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
       }
 
       transitionStarted.current = true;
+      onDiveStartRef.current();
       setZooming(true);
-      transitionTimer.current = window.setTimeout(enterApp, productZoomConfig.durationMs);
+      // Hold the final full-bleed #650B17 frame so the app underneath is painted
+      // before the landing, including its red veil, is removed.
+      transitionTimer.current = window.setTimeout(
+        () => enterAppRef.current(),
+        productZoomConfig.durationMs + 40,
+      );
     };
 
     attemptTransition();
-  }, [enterApp, measureLens]);
+  }, [measureLens]);
 
   useEffect(() => {
     let touchStart = 0;
@@ -280,12 +298,17 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
       }
       if (pendingFrame.current !== null) {
         window.cancelAnimationFrame(pendingFrame.current);
-      }
-      if (transitionTimer.current !== null) {
-        window.clearTimeout(transitionTimer.current);
+        pendingFrame.current = null;
       }
     };
   }, [startTransition]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current);
+      if (pendingFrame.current !== null) window.cancelAnimationFrame(pendingFrame.current);
+    };
+  }, []);
 
   const zoomStyle = lensGeometry
     ? ({
@@ -345,9 +368,9 @@ function OptisLanding({ enterApp }: { enterApp: () => void }) {
   );
 }
 
-function OptisAppShell({ exit }: { exit: () => void }) {
+function OptisAppShell({ exit, revealed }: { exit: () => void; revealed: boolean }) {
   return (
-    <main className="optis-app-shell">
+    <main className={`optis-app-shell${revealed ? " is-revealed" : ""}`} inert={!revealed} aria-hidden={!revealed}>
       <div className="app-shell-brand">OPTIS</div>
       <div className="app-ready-state">
         <span aria-hidden="true" />
@@ -359,11 +382,19 @@ function OptisAppShell({ exit }: { exit: () => void }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState<"landing" | "app">("landing");
+  const [phase, setPhase] = useState<"landing" | "diving" | "app">("landing");
 
-  return page === "landing" ? (
-    <OptisLanding enterApp={() => setPage("app")} />
-  ) : (
-    <OptisAppShell exit={() => setPage("landing")} />
+  return (
+    <>
+      {phase !== "landing" && (
+        <OptisAppShell revealed={phase === "app"} exit={() => setPhase("landing")} />
+      )}
+      {phase !== "app" && (
+        <OptisLanding
+          onDiveStart={() => setPhase((current) => (current === "landing" ? "diving" : current))}
+          enterApp={() => setPhase("app")}
+        />
+      )}
+    </>
   );
 }

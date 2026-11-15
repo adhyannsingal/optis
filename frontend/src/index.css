@@ -45,6 +45,8 @@
 }
 
 .landing {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
@@ -264,7 +266,8 @@
   pointer-events: none;
 }
 
-.landing.is-zooming .motion-stage .spectacles {
+.landing.is-zooming .motion-stage .spectacles,
+.camera-zoom-transition.is-active .camera-dark-aperture {
   animation: camera-lens-zoom var(--camera-zoom-duration) cubic-bezier(0.55, 0.04, 0.2, 1) both;
   will-change: transform;
 }
@@ -329,48 +332,33 @@
   transform-origin: center;
 }
 
-.camera-zoom-transition.is-active .camera-dark-aperture {
-  animation: camera-aperture-track var(--camera-zoom-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
-  will-change: transform;
-}
-
 .camera-dark-fill {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   background: var(--camera-destination);
   opacity: 0;
-  transform: scale(0.3);
+  transform: scale(0.72);
 }
 
 .camera-zoom-transition.is-active .camera-dark-fill {
-  animation: camera-aperture-fill var(--camera-zoom-duration) cubic-bezier(0.55, 0.04, 0.2, 1) both;
+  animation: camera-aperture-fill var(--camera-zoom-duration) linear both;
   will-change: transform, opacity;
-}
-
-@keyframes camera-aperture-track {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  100% {
-    transform: translate3d(var(--camera-translate-x), var(--camera-translate-y), 0)
-      scale(var(--camera-zoom-scale));
-  }
 }
 
 @keyframes camera-aperture-fill {
   0%,
-  34% {
+  22% {
     opacity: 0;
-    transform: scale(0.65);
+    transform: scale(0.72);
   }
-  48% {
-    opacity: 0.86;
-    transform: scale(1.05);
-  }
-  74% {
+  38% {
     opacity: 1;
-    transform: scale(calc(var(--camera-fill-scale) * 0.48));
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(var(--camera-fill-scale));
   }
   100% {
     opacity: 1;
@@ -379,7 +367,9 @@
 }
 
 .optis-app-shell {
-  position: relative;
+  position: fixed;
+  z-index: 0;
+  inset: 0;
   display: flex;
   min-height: 100vh;
   min-height: 100svh;
@@ -433,7 +423,13 @@
 .app-shell-brand,
 .app-ready-state,
 .optis-app-shell button {
-  animation: app-content-arrive 0.5s 0.08s ease-out both;
+  opacity: 0;
+}
+
+.optis-app-shell.is-revealed .app-shell-brand,
+.optis-app-shell.is-revealed .app-ready-state,
+.optis-app-shell.is-revealed button {
+  animation: app-content-arrive 0.45s ease-out both;
 }
 
 .optis-app-shell button:hover {
