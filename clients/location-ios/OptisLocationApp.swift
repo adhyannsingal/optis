@@ -13,6 +13,7 @@ private struct LocationView: View {
     @State private var endpoint = ""
     @State private var token = ""
     @State private var status = "Idle"
+    @State private var announcement = ""
     @State private var sender: PhoneLocation?
 
     var body: some View {
@@ -24,11 +25,12 @@ private struct LocationView: View {
                 .disabled(sender != nil)
             SecureField("Local Optis token", text: $token)
                 .disabled(sender != nil)
-            Button(sender == nil ? "Start sending location" : "Stop sending location") {
+            Button(sender == nil ? "Start guidance" : "Stop guidance") {
                 if let sender {
                     sender.stop()
                     self.sender = nil
                     status = "Stopped"
+                    announcement = ""
                     return
                 }
                 let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -45,12 +47,14 @@ private struct LocationView: View {
                     status = "That Optis server URL is invalid."
                     return
                 }
-                let sender = PhoneLocation(endpoint: url, token: trimmedToken) { status = $0 }
+                let sender = PhoneLocation(endpoint: url, token: trimmedToken, report: { status = $0 },
+                                           reportAnnouncement: { announcement = $0 })
                 self.sender = sender
                 status = "Waiting for a location fix."
                 sender.start()
             }
             Text(status)
+            if !announcement.isEmpty { Text(announcement) }
             Text("Keep Optis Location open while walking.")
                 .foregroundStyle(.secondary)
         }
@@ -62,6 +66,7 @@ private struct LocationView: View {
                 sender.stop()
                 self.sender = nil
                 status = "Stopped when the app left the foreground."
+                announcement = ""
             }
         }
         .onDisappear {

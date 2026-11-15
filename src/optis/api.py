@@ -137,6 +137,12 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/v1/vision/announcement")
+    def vision_announcement(authorization: str | None = Header(default=None)):
+        authorize(authorization, expected=location_token or token)
+        state, event = camera.announcement() if camera else ("disabled", None)
+        return JSONResponse({"camera_state": state, "announcement": event}, headers={"Cache-Control": "no-store"})
+
     @app.get("/v1/health")
     def health():
         return {"status": "ok", "camera": camera.snapshot()[0] if camera else "disabled",

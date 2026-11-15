@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreLocation
 import Foundation
 
@@ -13,18 +14,34 @@ final class PhoneLocation: NSObject, @preconcurrency CLLocationManagerDelegate {
         let age_at_send_ms: Int
     }
 
+    private struct Announcements: Decodable {
+        struct Event: Decodable {
+            let event_id: String
+            let text: String
+            let expires_in_ms: Int
+        }
+        let announcement: Event?
+        let camera_state: String
+    }
+
     private let manager = CLLocationManager()
     private let endpoint: URL
     private let token: String
     private let report: (String) -> Void
+    private let reportAnnouncement: (String) -> Void
+    private let speech = AVSpeechSynthesizer()
+    private var announcements: Task<Void, Never>?
+    private var lastAnnouncement: String?
     private var seq = 0
     private var active = false
     private var sending: Task<Void, Never>?
 
-    init(endpoint: URL, token: String, report: @escaping (String) -> Void) {
+    init(endpoint: URL, token: String, report: @escaping (String) -> Void,
+         reportAnnouncement: @escaping (String) -> Void) {
         self.endpoint = endpoint
         self.token = token
         self.report = report
+        self.reportAnnouncement = reportAnnouncement
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
@@ -33,6 +50,7 @@ final class PhoneLocation: NSObject, @preconcurrency CLLocationManagerDelegate {
 
     func start() {
         active = true
+        startAnnouncements()
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -51,6 +69,55 @@ final class PhoneLocation: NSObject, @preconcurrency CLLocationManagerDelegate {
         active = false
         manager.stopUpdatingLocation()
         sending?.cancel()
+        announcements?.cancel()
+        announcements = nil
+        speech.stopSpeaking(at: .immediate)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func startAnnouncements() {
+        guard announcements == nil else { return }
+        let url = endpoint.deletingLastPathComponent().appending(path: "vision").appending(path: "announcement")
+        announcements = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.receiveAnnouncement(url)
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+        }
+    }
+
+    private func receiveAnnouncement(_ url: URL) async {
+        var request = URLRequest(url: url, timeoutInterval: 2)
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let started = ProcessInfo.processInfo.systemUptime
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard !Task.isCancelled, active else { return }
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                reportAnnouncement("Can’t receive camera announcements. Check the Optis server and token.")
+                return
+            }
+            let reply = try JSONDecoder().decode(Announcements.self, from: data)
+            guard reply.camera_state == "ready" else {
+                reportAnnouncement(reply.camera_state == "disabled" ? "Optis camera is off." : "Waiting for a live camera view.")
+                return
+            }
+            guard let event = reply.announcement,
+                  event.event_id != lastAnnouncement,
+                  (ProcessInfo.processInfo.systemUptime - started) * 1000 < Double(event.expires_in_ms)
+            else {
+                if !speech.isSpeaking { reportAnnouncement("Listening for camera announcements.") }
+                return
+            }
+            lastAnnouncement = event.event_id
+            reportAnnouncement(event.text)
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio)
+            try session.setActive(true)
+            speech.speak(AVSpeechUtterance(string: event.text))
+        } catch {
+            if active && !Task.isCancelled { reportAnnouncement("Camera announcements are unavailable.") }
+        }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
