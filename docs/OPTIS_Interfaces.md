@@ -1,4 +1,4 @@
-# PHAROS v1 system contracts
+# Optis v1 system contracts
 
 D owns the interface definitions. A, B, C and D agree on field names and fake fixtures before writing live adapters. The baseline uses Python calls and JSON-serializable data inside one process. If an ESP32 camera is used, its JPEG/MJPEG stream terminates at the capture adapter. The arm stays on a local, exclusively owned serial connection.
 

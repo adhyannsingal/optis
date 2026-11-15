@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from pharos.api import create_app
-from pharos.interaction.voice import command
-from pharos.navigation.valhalla import Destination, Valhalla
+from optis.api import create_app
+from optis.interaction.voice import command
+from optis.navigation.valhalla import Destination, Valhalla
 
 
 START = (42.0, -72.0)
@@ -82,7 +82,7 @@ class WalkingRoutes(unittest.TestCase):
         self.assertEqual(self.fix(4, START)["status"], "guidance")
         self.assertFalse(route.json()["data"]["simulated"])
         from time import monotonic
-        with patch("pharos.api.monotonic", return_value=monotonic() + 6):
+        with patch("optis.api.monotonic", return_value=monotonic() + 6):
             self.assertEqual(self.client.get("/v1/status").json()["route"]["status"], "weak_signal")
 
     def test_stop_cancels_a_pending_plan(self):
@@ -110,7 +110,7 @@ class WalkingRoutes(unittest.TestCase):
         self.assertIsNone(self.client.get("/v1/status").json()["route"])
 
     def test_valhalla_request_and_maneuver_paths(self):
-        from pharos.navigation.navigation import Fix, Navigation
+        from optis.navigation.navigation import Fix, Navigation
 
         response = MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps({
@@ -123,7 +123,7 @@ class WalkingRoutes(unittest.TestCase):
                 ],
             }]},
         }).encode()
-        with patch("pharos.navigation.valhalla.urlopen", return_value=response) as fetch:
+        with patch("optis.navigation.valhalla.urlopen", return_value=response) as fetch:
             paths, instructions = Valhalla("http://localhost:8002").plan(START, self.dest)
         self.assertEqual(json.loads(fetch.call_args.args[0].data)["costing"], "pedestrian")
         self.assertEqual(paths[0][1], (42.0001, -72.00016))

@@ -1,6 +1,6 @@
-# PHAROS Build Spec Final
+# Optis Build Spec Final
 
-Build in this order: clean backend → Grok Voice → camera and range sensor → full sensor integration → Jetson and arm. Inventory Jetson storage and identify the arm in parallel so hardware availability does not delay the last stage. One runnable PHAROS application owns perception, navigation, speech arbitration and arm requests. Run it on a Mac during development and on the Jetson Orin Nano for final integration.
+Build in this order: clean backend → Grok Voice → camera and range sensor → full sensor integration → Jetson and arm. Inventory Jetson storage and identify the arm in parallel so hardware availability does not delay the last stage. One runnable Optis application owns perception, navigation, speech arbitration and arm requests. Run it on a Mac during development and on the Jetson Orin Nano for final integration.
 
 ## 1. Backend and code import
 
@@ -8,24 +8,24 @@ Build in this order: clean backend → Grok Voice → camera and range sensor �
 
 | Destination | Port from the local import kit | New work |
 | --- | --- | --- |
-| `src/pharos/perception/` | `app/vision/{model,tracking,http_camera,capture}.py`, model manifest and three vision tests from `perception-source`. Use `visionlab/capture.py` as a reference for latest-frame processing and recovery. | One Linux-compatible UVC adapter keyed by configured device identity, and one W11 adapter. Normalize to the existing observation contract. Convert normalized boxes to decoded-frame pixel coordinates explicitly. Keep the existing detector for scene and bottle cues. Evaluate a local YOLO-World worker for keyrings and phones on the same camera frames. |
-| `src/pharos/navigation/` | `visionlab/{navigation,routes}.py`, standard/noisy replay fixtures and route tests from `navigation-memory-source`. | Live location adapter, surveyed waypoints, projection into local metres, and route hold/resume when fixes go stale. Extract replay-independent logic and keep replay labeled. |
-| `src/pharos/interaction/` | `visionlab/{commands,store}.py` and memory tests. Use `service.py`, `search.py` and benchmark fixtures as references for intent routing, stability and false-positive reporting. | Support keys, phone and bottle. Keep explicit placements and automatic last-seen sightings in separate SQLite tables. Use the existing preview to show an optional local photo of the last sighting. |
-| `firmware/w11/`, `firmware/range/` | Camera preparation script plus its vendor notes. Range extraction starts from the sensor-only feedback implementation and controller tests. | Keep only the camera capture path and one USB range protocol. Update generator and reader together to use `X-PHAROS-Frame-Age-Us`. Drop hosted upload, haptics and earlier application layers. |
+| `src/optis/perception/` | `app/vision/{model,tracking,http_camera,capture}.py`, model manifest and three vision tests from `perception-source`. Use `visionlab/capture.py` as a reference for latest-frame processing and recovery. | One Linux-compatible UVC adapter keyed by configured device identity, and one W11 adapter. Normalize to the existing observation contract. Convert normalized boxes to decoded-frame pixel coordinates explicitly. Keep the existing detector for scene and bottle cues. Evaluate a local YOLO-World worker for keyrings and phones on the same camera frames. |
+| `src/optis/navigation/` | `visionlab/{navigation,routes}.py`, standard/noisy replay fixtures and route tests from `navigation-memory-source`. | Live location adapter, surveyed waypoints, projection into local metres, and route hold/resume when fixes go stale. Extract replay-independent logic and keep replay labeled. |
+| `src/optis/interaction/` | `visionlab/{commands,store}.py` and memory tests. Use `service.py`, `search.py` and benchmark fixtures as references for intent routing, stability and false-positive reporting. | Support keys, phone and bottle. Keep explicit placements and automatic last-seen sightings in separate SQLite tables. Use the existing preview to show an optional local photo of the last sighting. |
+| `firmware/w11/`, `firmware/range/` | Camera preparation script plus its vendor notes. Range extraction starts from the sensor-only feedback implementation and controller tests. | Keep only the camera capture path and one USB range protocol. Update generator and reader together to use `X-OPTIS-Frame-Age-Us`. Drop hosted upload, haptics and earlier application layers. |
 
-The import kit lives at `work/pharos-import-review/` beside the review output directory. It is a local review copy of exact source files with commit IDs and checksums in `PROVENANCE.local.txt`. Port in small changes, fix imports and fixture paths, and adapt tests that depend on the previous application entry point. Use PHAROS names for package paths, headers and settings. Keep upstream attribution where required. Confirm reuse and redistribution permissions before adding prior code, vendor examples or model assets to a submission. Keep credentials, private captures, real location traces and databases out of Git. Model weights are acquired separately, pinned by checksum, cached before the demo, and tested on the actual Linux ARM64 image. Verify the chosen ONNX runtime and CPU performance before adding acceleration.
+The import kit lives at `work/optis-import-review/` beside the review output directory. It is a local review copy of exact source files with commit IDs and checksums in `PROVENANCE.local.txt`. Port in small changes, fix imports and fixture paths, and adapt tests that depend on the previous application entry point. Use Optis names for package paths, headers and settings. Keep upstream attribution where required. Confirm reuse and redistribution permissions before adding prior code, vendor examples or model assets to a submission. Keep credentials, private captures, real location traces and databases out of Git. Model weights are acquired separately, pinned by checksum, cached before the demo, and tested on the actual Linux ARM64 image. Verify the chosen ONNX runtime and CPU performance before adding acceleration.
 
 Repo layout for implementation
 
 ```text
-src/pharos/{api,coordinator,contracts}.py
-src/pharos/{perception,navigation,interaction,arm}/
+src/optis/{api,coordinator,contracts}.py
+src/optis/{perception,navigation,interaction,arm}/
 firmware/{w11,range}/
 clients/location-ios/
 config/{demo,bench}.example.json
 tests/{fixtures,integration}/
 models/manifest.json
-docs/PHAROS_Build_Spec_Final.md
+docs/OPTIS_Build_Spec_Final.md
 ```
 
 ### Service contract

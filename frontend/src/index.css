@@ -118,7 +118,7 @@
   opacity: 0.48;
 }
 
-.pharos-app-shell button {
+.optis-app-shell button {
   padding: 0 22px;
   border: 1px solid var(--border-primary);
   border-radius: 12px;
@@ -133,12 +133,12 @@
     transform 180ms ease;
 }
 
-.pharos-app-shell button:hover {
+.optis-app-shell button:hover {
   border-color: #7d7874;
   background: rgb(255 255 255 / 70%);
 }
 
-.pharos-app-shell button:active {
+.optis-app-shell button:active {
   transform: scale(0.98);
 }
 
@@ -375,7 +375,7 @@
   }
 }
 
-.pharos-app-shell {
+.optis-app-shell {
   position: relative;
   display: flex;
   min-height: 100vh;
@@ -418,7 +418,7 @@
   letter-spacing: 0.015em;
 }
 
-.pharos-app-shell button {
+.optis-app-shell button {
   position: absolute;
   top: 28px;
   right: 40px;
@@ -429,16 +429,16 @@
 
 .app-shell-brand,
 .app-ready-state,
-.pharos-app-shell button {
+.optis-app-shell button {
   animation: app-content-arrive 0.5s 0.08s ease-out both;
 }
 
-.pharos-app-shell button:hover {
+.optis-app-shell button:hover {
   border-color: rgb(244 244 242 / 38%);
   background: rgb(255 255 255 / 8%);
 }
 
-.pharos-app-shell button:focus-visible {
+.optis-app-shell button:focus-visible {
   outline-color: #f4f4f2;
 }
 
@@ -509,7 +509,7 @@
     height: 235px;
   }
 
-  .pharos-app-shell {
+  .optis-app-shell {
     padding: 24px;
   }
 
@@ -518,7 +518,7 @@
     left: 24px;
   }
 
-  .pharos-app-shell button {
+  .optis-app-shell button {
     top: 16px;
     right: 16px;
   }

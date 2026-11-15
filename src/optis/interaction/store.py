@@ -7,7 +7,7 @@ import os
 
 
 def default_database():
-    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "pharos/placements.sqlite3"
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "optis/placements.sqlite3"
 
 
 class Store:

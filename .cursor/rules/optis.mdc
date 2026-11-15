@@ -1,0 +1,5 @@
+---
+description: Optis HackUMass project and safety conventions
+alwaysApply: true
+---
+Read `AGENTS.md`, `OPTIS_CONTEXT.md`, and the three docs in `docs/` before making architecture or interface changes. Treat `docs/OPTIS_Interfaces.md` as the canonical v1 contract. Mock mode must never actuate real hardware; real arm movement needs qualified bench preflight and separate local spotter approval. Preserve teammate folder ownership and write tests before integration. The frontend is being built in Figma around real coordinator state, with an existing Home screen reused.

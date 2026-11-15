@@ -49,7 +49,7 @@ type CameraZoomProperties = CSSProperties & {
 // The focal point was measured from the red circular lens in the 1078 × 375 source asset.
 // Future hardware only needs a new source, normalized lens point, and optional scale tuning.
 const productZoomConfig: ProductZoomConfig = {
-  imageSrc: "/stride-glasses.png",
+  imageSrc: "/optis-glasses.png",
   lensPoint: {
     x: 0.9309,
     y: 0.2242,
@@ -111,7 +111,7 @@ function ProductIllustration({
   return (
     <div className="product-illustration motion-stage">
       <div className="stage-word" aria-hidden="true">
-        {"PHAROS".split("").map((letter, index) => (
+        {"OPTIS".split("").map((letter, index) => (
           <span key={`${letter}-${index}`}>{letter}</span>
         ))}
       </div>
@@ -147,7 +147,7 @@ function CameraZoomTransition({
   );
 }
 
-function PharosLanding({ enterApp }: { enterApp: () => void }) {
+function OptisLanding({ enterApp }: { enterApp: () => void }) {
   const [zooming, setZooming] = useState(false);
   const [lensGeometry, setLensGeometry] = useState<LensGeometry | null>(null);
   const transitionStarted = useRef(false);
@@ -307,7 +307,7 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
 
       <nav className="topbar" aria-label="Public navigation">
         <button className="enter-button" onClick={startTransition}>
-          <span>Explore PHAROS</span>
+          <span>Explore Optis</span>
           <span className="enter-arrow" aria-hidden="true">
             ↗
           </span>
@@ -337,10 +337,10 @@ function PharosLanding({ enterApp }: { enterApp: () => void }) {
   );
 }
 
-function PharosAppShell({ exit }: { exit: () => void }) {
+function OptisAppShell({ exit }: { exit: () => void }) {
   return (
-    <main className="pharos-app-shell">
-      <div className="app-shell-brand">PHAROS</div>
+    <main className="optis-app-shell">
+      <div className="app-shell-brand">OPTIS</div>
       <div className="app-ready-state">
         <span aria-hidden="true" />
         <p>Application ready</p>
@@ -354,8 +354,8 @@ export default function App() {
   const [page, setPage] = useState<"landing" | "app">("landing");
 
   return page === "landing" ? (
-    <PharosLanding enterApp={() => setPage("app")} />
+    <OptisLanding enterApp={() => setPage("app")} />
   ) : (
-    <PharosAppShell exit={() => setPage("landing")} />
+    <OptisAppShell exit={() => setPage("landing")} />
   );
 }

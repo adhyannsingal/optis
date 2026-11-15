@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from pharos.api import create_app
-from pharos.navigation.location import PhoneRoute
+from optis.api import create_app
+from optis.navigation.location import PhoneRoute
 
 
 class BackendChecks(unittest.TestCase):
@@ -138,7 +138,7 @@ class BackendChecks(unittest.TestCase):
             turn = self.fix(client, 5, 42.00006, -72)
             self.assertEqual(turn["status"], "turn")
             self.assertFalse(turn["data"]["simulated"])
-            with patch("pharos.api.monotonic", return_value=monotonic() + 6):
+            with patch("optis.api.monotonic", return_value=monotonic() + 6):
                 status = client.get("/v1/status", headers=self.headers).json()
                 self.assertEqual(status["route"]["status"], "weak_signal")
                 self.assertGreaterEqual(status["location"]["age_seconds"], 6)

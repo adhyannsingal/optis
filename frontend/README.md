@@ -1,6 +1,6 @@
-# PHAROS Frontend
+# Optis Frontend
 
-React 19 + TypeScript + Vite + Tailwind CSS v4 frontend for PHAROS.
+React 19 + TypeScript + Vite + Tailwind CSS v4 frontend for Optis.
 
 ## Local development
 

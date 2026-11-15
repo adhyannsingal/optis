@@ -33,16 +33,16 @@ def prepare(core, output):
         raise RuntimeError('Capture handler changed; inspect timestamp insertion before compiling')
     capture_source = capture_source.replace(marker,marker+'''
   // Report age using the camera's one monotonic clock, not a client epoch claim.
-  char pharos_age[32];
-  int64_t pharos_frame_us = (int64_t)fb->timestamp.tv_sec * 1000000LL + fb->timestamp.tv_usec;
-  snprintf(pharos_age, sizeof(pharos_age), "%lld", (long long)(esp_timer_get_time()-pharos_frame_us));
-  httpd_resp_set_hdr(req, "X-PHAROS-Frame-Age-Us", pharos_age);
+  char optis_age[32];
+  int64_t optis_frame_us = (int64_t)fb->timestamp.tv_sec * 1000000LL + fb->timestamp.tv_usec;
+  snprintf(optis_age, sizeof(optis_age), "%lld", (long long)(esp_timer_get_time()-optis_frame_us));
+  httpd_resp_set_hdr(req, "X-OPTIS-Frame-Age-Us", optis_age);
   httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 ''')
     http_path.write_text(http_source[:capture_start]+capture_source+http_source[capture_end:])
     sketch = (source/'CameraWebServer.ino').read_text()
     sketch = sketch.replace('const char *ssid = "**********";\nconst char *password = "**********";',
-        '#include "secrets.h"\nconst char *ssid = PHAROS_CAMERA_WIFI_SSID;\nconst char *password = PHAROS_CAMERA_WIFI_PASSWORD;')
+        '#include "secrets.h"\nconst char *ssid = OPTIS_CAMERA_WIFI_SSID;\nconst char *password = OPTIS_CAMERA_WIFI_PASSWORD;')
     if '#include "secrets.h"' not in sketch:
         raise RuntimeError('Installed example layout changed; inspect it before use')
     sketch = sketch.replace('  Serial.println();', '''  Serial.println();
@@ -62,7 +62,7 @@ def prepare(core, output):
 ''')
     secrets = output/'secrets.h'
     if not secrets.exists():
-        secrets.write_text('#pragma once\n#define PHAROS_CAMERA_WIFI_SSID "YOUR_2_4_GHZ_WIFI"\n#define PHAROS_CAMERA_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"\n')
+        secrets.write_text('#pragma once\n#define OPTIS_CAMERA_WIFI_SSID "YOUR_2_4_GHZ_WIFI"\n#define OPTIS_CAMERA_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"\n')
         secrets.chmod(0o600)
     print(f'Prepared camera-only example: {output}')
     print(f'Edit WiFi privately in: {secrets}')
@@ -73,6 +73,6 @@ def prepare(core, output):
 if __name__=='__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--core',type=Path,default=Path.home()/'Library/Arduino15/packages/esp32/hardware/esp32/3.3.2')
-    parser.add_argument('--output',type=Path,default=Path('/tmp/pharos-w11-camera/CameraWebServer'))
+    parser.add_argument('--output',type=Path,default=Path('/tmp/optis-w11-camera/CameraWebServer'))
     args = parser.parse_args()
     prepare(args.core,args.output)

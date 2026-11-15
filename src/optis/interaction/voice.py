@@ -1,4 +1,4 @@
-"""Push-to-talk adapter for xAI batch voice and local PHAROS commands."""
+"""Push-to-talk adapter for xAI batch voice and local Optis commands."""
 
 import json
 import re

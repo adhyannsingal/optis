@@ -1,4 +1,4 @@
-"""Local PHAROS backend. Hardware motion is unavailable in this build."""
+"""Local Optis backend. Hardware motion is unavailable in this build."""
 from contextlib import asynccontextmanager
 from base64 import b64encode
 from datetime import UTC, datetime, timedelta
@@ -115,13 +115,13 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
                 camera.close()
             app.state.store.close()
 
-    app = FastAPI(title="PHAROS", lifespan=lifespan)
+    app = FastAPI(title="Optis", lifespan=lifespan)
 
     def authorize(authorization):
         if not token or not authorization or not hmac.compare_digest(
             authorization.encode(), f"Bearer {token}".encode()
         ):
-            raise HTTPException(401, "A valid local PHAROS token is required.")
+            raise HTTPException(401, "A valid local Optis token is required.")
 
     @app.get("/camera", include_in_schema=False)
     def camera_page():
@@ -319,7 +319,7 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
         authorize(authorization)
         adapter = active_voice()
         if not adapter:
-            raise HTTPException(503, "Set XAI_API_KEY on the PHAROS server to enable voice.")
+            raise HTTPException(503, "Set XAI_API_KEY on the Optis server to enable voice.")
         media_type = request.headers.get("content-type", "").split(";")[0].lower()
         if media_type not in AUDIO_FILES:
             raise HTTPException(415, "Record WebM, MP4, or WAV audio.")
@@ -356,24 +356,24 @@ def create_app(*, database=None, token=None, checked_route=None, camera=None, vo
 def from_environment():
 
     camera = None
-    if source := os.getenv("PHAROS_CAMERA"):
+    if source := os.getenv("OPTIS_CAMERA"):
         from .perception.worker import HeadCamera
 
-        model = Path(os.environ["PHAROS_MODEL"])
-        manifest = json.loads(Path(os.environ.get("PHAROS_MODEL_MANIFEST", "models/manifest.json")).read_text())
+        model = Path(os.environ["OPTIS_MODEL"])
+        manifest = json.loads(Path(os.environ.get("OPTIS_MODEL_MANIFEST", "models/manifest.json")).read_text())
         keyrings = None
-        if checkpoint := os.getenv("PHAROS_KEYRING_MODEL"):
+        if checkpoint := os.getenv("OPTIS_KEYRING_MODEL"):
             from .perception.keyrings import KeyringSearch
 
             keyrings = KeyringSearch(Path(checkpoint))
         camera = HeadCamera(source, model, manifest["onnx_sha256"], keyrings=keyrings,
-                            camera_name=os.getenv("PHAROS_CAMERA_NAME", "head camera"))
-    route = PhoneRoute(json.loads(Path(path).read_text())) if (path := os.getenv("PHAROS_ROUTE")) else None
-    token = os.environ.get("PHAROS_TOKEN")
+                            camera_name=os.getenv("OPTIS_CAMERA_NAME", "head camera"))
+    route = PhoneRoute(json.loads(Path(path).read_text())) if (path := os.getenv("OPTIS_ROUTE")) else None
+    token = os.environ.get("OPTIS_TOKEN")
     if not token:
-        raise RuntimeError("Set PHAROS_TOKEN before starting the backend.")
+        raise RuntimeError("Set OPTIS_TOKEN before starting the backend.")
     key = os.getenv("XAI_API_KEY")
-    key_file = os.getenv("PHAROS_XAI_KEY_FILE")
-    router = Valhalla(url, os.getenv("PHAROS_PLACES_INDEX")) if (url := os.getenv("PHAROS_VALHALLA_URL")) else None
-    return create_app(database=os.getenv("PHAROS_DB"), token=token, checked_route=route, router=router, camera=camera,
+    key_file = os.getenv("OPTIS_XAI_KEY_FILE")
+    router = Valhalla(url, os.getenv("OPTIS_PLACES_INDEX")) if (url := os.getenv("OPTIS_VALHALLA_URL")) else None
+    return create_app(database=os.getenv("OPTIS_DB"), token=token, checked_route=route, router=router, camera=camera,
                       voice=XaiVoice(key) if key else None, voice_key_file=Path(key_file) if key_file else None)
